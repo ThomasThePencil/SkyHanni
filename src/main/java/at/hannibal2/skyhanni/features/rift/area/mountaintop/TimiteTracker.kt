@@ -54,7 +54,6 @@ object TimiteTracker {
         val profit = tracker.drawItems(data, { true }, this)
 
         NeuItems.getRecipes(HIGHLITE).singleOrNull()?.let { highliteRecipe ->
-            var craftableAmount = 0
             var craftableAmountByYoungite = 0
             var craftableAmountByTimite = 0
             var craftableAmountByObsolite = 0
@@ -71,7 +70,7 @@ object TimiteTracker {
                 }
             }
             val craftableAmountArray = listOf(craftableAmountByYoungite, craftableAmountByTimite, craftableAmountByObsolite)
-            craftableAmount = craftableAmountArray.min()
+            var craftableAmount = craftableAmountArray.min()
             val motes = HIGHLITE.motesNpcPrice()?.times(craftableAmount)?.shortFormat() ?: "0"
             if (craftableAmount > 0) {
                 addSearchString(" §7${craftableAmount.shortFormat()}x ${HIGHLITE.repoItemName} Craftable§7: §5$motes motes")
