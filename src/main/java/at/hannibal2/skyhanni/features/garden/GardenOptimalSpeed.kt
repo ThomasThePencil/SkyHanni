@@ -12,7 +12,6 @@ import at.hannibal2.skyhanni.events.render.gui.ScreenDrawnEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ConditionalUtils
-import at.hannibal2.skyhanni.utils.ConfigUtils.jumpToEditor
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
@@ -26,7 +25,6 @@ import at.hannibal2.skyhanni.utils.SignUtils
 import at.hannibal2.skyhanni.utils.SignUtils.isRancherSign
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.TimeUtils.ticks
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
 import at.hannibal2.skyhanni.utils.renderables.primitives.ItemStackRenderable.Companion.item
@@ -148,7 +146,7 @@ object GardenOptimalSpeed {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
 
         val speed = optimalSpeed ?: return
 
@@ -165,13 +163,13 @@ object GardenOptimalSpeed {
 
         if (config.showOnHUD) config.pos.renderRenderable(
             Renderable.text("§$colorCode$text"),
-            posLabel = "Garden Optimal Speed"
+            posLabel = "Garden Optimal Speed",
         )
         if (speed != currentSpeed && !recentlySwitchedTool) warn(speed)
     }
 
     private fun warn(optimalSpeed: Int) {
-        if (!MinecraftCompat.localPlayer.onGround()) return
+        if (!PlayerUtils.onGround()) return
         if (GardenApi.onUnfarmablePlot) return
         if (!config.warning) return
         if (!GardenApi.isCurrentlyFarming()) return
@@ -194,12 +192,7 @@ object GardenOptimalSpeed {
                 action = { HypixelCommands.setMaxSpeed(optimalSpeed) },
             )
         } else {
-            ChatUtils.clickableChat(
-                text,
-                onClick = { config::onlyWarnRanchers.jumpToEditor() },
-                hover = "§eClick to disable this feature!",
-                replaceSameMessage = true,
-            )
+            ChatUtils.notifyOrDisable(text, config::onlyWarnRanchers)
         }
     }
 

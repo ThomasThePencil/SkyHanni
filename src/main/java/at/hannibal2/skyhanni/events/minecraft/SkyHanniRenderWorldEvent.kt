@@ -1,14 +1,16 @@
 package at.hannibal2.skyhanni.events.minecraft
 
 import at.hannibal2.skyhanni.api.event.SkyHanniEvent
+import at.hannibal2.skyhanni.skyhannimodule.PrimaryFunction
 import com.mojang.blaze3d.vertex.PoseStack
-import net.minecraft.client.Camera
 import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.renderer.state.level.CameraRenderState
 
+@PrimaryFunction("onRenderWorld")
 class SkyHanniRenderWorldEvent(
     val matrices: PoseStack,
-    val camera: Camera,
-    val vertexConsumers: MultiBufferSource.BufferSource,
+    val camera: CameraRenderState,
+    val bufferSource: MultiBufferSource.BufferSource,
     val partialTicks: Float,
     var isCurrentlyDeferring: Boolean = true,
 ) : SkyHanniEvent()

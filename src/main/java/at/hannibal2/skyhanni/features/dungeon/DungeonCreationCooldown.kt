@@ -39,7 +39,7 @@ object DungeonCreationCooldown {
 
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         join.matchMatcher(event.message) {
             val player = group("player").cleanPlayerName()
             if (player == PlayerUtils.getName()) {
@@ -62,7 +62,7 @@ object DungeonCreationCooldown {
     }
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!isEnabled()) return
         if (!cooldown.isInFuture()) return
         val display = Renderable.text("§eDungeon Creation Cooldown: §b${cooldown.timeUntil().format()}")

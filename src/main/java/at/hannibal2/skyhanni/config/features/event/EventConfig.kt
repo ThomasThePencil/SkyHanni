@@ -57,18 +57,18 @@ class EventConfig {
     @Category(name = "The Carnival", desc = "Features for games at §eThe Carnival §7when §bFoxy §7is Mayor.")
     val carnival: CarnivalConfig = CarnivalConfig()
 
-    // comment in if the event is needed again
-    //    @ConfigOption(name = "300þ Anniversary Celebration", desc = "Features for the 300þ year of SkyBlock")
+    @Expose
+    @Accordion
+    @Category(name = "Harvest Feast", desc = "Features for the Harvest Feast yearly farming event.")
+    val feast: HarvestFeastConfig = HarvestFeastConfig()
+
+    // TODO rename to centuryCelebration
+    @ConfigOption(name = "Century Celebration", desc = "Features for the Century Celebration Event in SkyBlock.")
     @Accordion
     @Expose
-    val century: CenturyConfig = CenturyConfig()
+    val anniversaryCelebration400: CenturyCelebrationConfig = CenturyCelebrationConfig()
 
-    @ConfigOption(name = "400þ Anniversary Celebration", desc = "Features for the 400þ year of SkyBlock.")
-    @Accordion
-    @Expose
-    val anniversaryCelebration400: AnniversaryCelebration400Config = AnniversaryCelebration400Config()
-
-    @ConfigOption(name = "Year of the Seal", desc = "Features for Year of the Seals.")
+    @ConfigOption(name = "Year of the Seal", desc = "Features for Year of the Seal.")
     @Accordion
     @Expose
     val yearOfTheSeal: YearOfTheSealConfig = YearOfTheSealConfig()
@@ -77,6 +77,11 @@ class EventConfig {
     @Accordion
     @Expose
     val yearOfThePig: YearOfThePigConfig = YearOfThePigConfig()
+
+    @ConfigOption(name = "Year of the Witch", desc = "Features for Year of the Witch.")
+    @Accordion
+    @Expose
+    val yearOfTheWitch: YearOfTheWitchConfig = YearOfTheWitchConfig()
 
     @Category(name = "Lobby Waypoints", desc = "Lobby Event Waypoint settings")
     @Expose

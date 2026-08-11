@@ -4,16 +4,16 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.SlayerApi
 import at.hannibal2.skyhanni.data.mob.Mob
 import at.hannibal2.skyhanni.data.mob.Mob.Companion.belongsToPlayer
+import at.hannibal2.skyhanni.data.mob.MobCategory
 import at.hannibal2.skyhanni.data.mob.MobFilter.isDisplayNpc
 import at.hannibal2.skyhanni.events.MobEvent
 import at.hannibal2.skyhanni.events.entity.EntityClickEvent
-import at.hannibal2.skyhanni.events.entity.EntityOpacityActiveEvent
-import at.hannibal2.skyhanni.events.entity.EntityOpacityEvent
+import at.hannibal2.skyhanni.events.entity.EntityTransparencyActiveEvent
+import at.hannibal2.skyhanni.events.entity.EntityTransparencyTickEvent
 import at.hannibal2.skyhanni.features.misc.CarryTracker
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.MobUtils.mob
 import at.hannibal2.skyhanni.utils.compat.MinecraftCompat.isLocalPlayer
-import net.minecraft.network.protocol.game.ServerboundInteractPacket
 import net.minecraft.world.entity.LivingEntity
 
 @SkyHanniModule
@@ -25,7 +25,7 @@ object ActiveBossTransparency {
     private var lastHitCarrierBoss = false
 
     @HandleEvent
-    fun onEntityOpacityActive(event: EntityOpacityActiveEvent) {
+    fun onEntityTransparencyActive(event: EntityTransparencyActiveEvent) {
         event.setActive(isActive())
     }
 
@@ -39,7 +39,7 @@ object ActiveBossTransparency {
 
     @HandleEvent(onlyOnSkyblock = true)
     fun onClickEntity(event: EntityClickEvent) {
-        if (event.action != ServerboundInteractPacket.ActionType.ATTACK) return
+        if (event.action != EntityClickEvent.ActionType.ATTACK) return
         val mob = event.clickedEntity.mob ?: return
 
         lastClickedMob = mob
@@ -47,7 +47,7 @@ object ActiveBossTransparency {
     }
 
     @HandleEvent
-    fun onEntityOpacity(event: EntityOpacityEvent<LivingEntity>) {
+    fun onEntityTransparencyTick(event: EntityTransparencyTickEvent<LivingEntity>) {
         if (!isActive()) return
         val entity = event.entity
 
@@ -62,8 +62,8 @@ object ActiveBossTransparency {
             // always show last clicked mob
             if (mob == lastClickedMob) return
 
-            val type = mob.mobType
-            if (type == Mob.Type.SLAYER) {
+            val category = mob.category
+            if (category == MobCategory.SLAYER) {
                 // hide own slayer boss
                 if (mob.belongsToPlayer()) return
 
@@ -73,16 +73,16 @@ object ActiveBossTransparency {
             }
 
             // maybe also hide other players
-            if (type == Mob.Type.PLAYER) {
+            if (category == MobCategory.PLAYER) {
                 // always show current slayer carry customers
                 if (CarryTracker.isCustomer(mob.name)) return
 
                 if (!config.applyToPlayers) return
             }
-            if (type == Mob.Type.PLAYER && !config.applyToPlayers) return
+            if (category == MobCategory.PLAYER && !config.applyToPlayers) return
         }
 
-        event.opacity = config.transparencyLevel.coerceIn(15, 70)
+        event.newTransparency = config.transparencyLevel.coerceIn(15, 70)
     }
 
     private fun isActive() = config.enabled && (SlayerApi.isInBossFight() || lastHitCarrierBoss)

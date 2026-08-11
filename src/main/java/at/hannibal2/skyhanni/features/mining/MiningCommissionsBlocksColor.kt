@@ -14,12 +14,12 @@ import at.hannibal2.skyhanni.features.mining.OreType.Companion.isOreType
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ConditionalUtils.onToggle
+import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.collection.TimeLimitedSet
 import at.hannibal2.skyhanni.utils.compat.ColoredBlockCompat
 import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.client.Minecraft
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.level.block.state.BlockState
 import kotlin.time.Duration.Companion.seconds
@@ -63,8 +63,8 @@ object MiningCommissionsBlocksColor {
     @HandleEvent
     fun onTabListUpdate(event: TabListUpdateEvent) {
         for (block in CommissionBlock.entries) {
-            val tabList = " §r§f${block.commissionName}: "
-            val newValue = event.tabList.any { it.startsWith(tabList) && !it.contains("DONE") }
+            val tabList = " ${block.commissionName}: "
+            val newValue = event.tabList.any { it.string.startsWith(tabList) && !it.string.contains("DONE") }
             if (block.highlight != newValue) {
                 if (newValue && block in ignoredTabListCommissions) continue
                 block.highlight = newValue
@@ -77,7 +77,7 @@ object MiningCommissionsBlocksColor {
 
     // TODO Commission API
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!enabled) return
         commissionCompletePattern.matchMatcher(event.message) {
             val name = group("name")
@@ -102,7 +102,7 @@ object MiningCommissionsBlocksColor {
 
         if (enabled) {
             if (config.sneakQuickToggle.get()) {
-                val sneaking = MinecraftCompat.localPlayer.isShiftKeyDown
+                val sneaking = PlayerUtils.isSneaking()
                 if (sneaking != oldSneakState) {
                     oldSneakState = sneaking
                     if (oldSneakState) {
@@ -118,7 +118,7 @@ object MiningCommissionsBlocksColor {
 
         if (reload) {
             replaceBlocksMapCache = mutableMapOf()
-            Minecraft.getInstance().levelRenderer.allChanged()
+            MinecraftCompat.reloadChunks()
             dirty = false
         }
     }
@@ -146,7 +146,7 @@ object MiningCommissionsBlocksColor {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Mining Commissions Blocks Color")
         if (!enabled) {
             event.addIrrelevant("not enabled")

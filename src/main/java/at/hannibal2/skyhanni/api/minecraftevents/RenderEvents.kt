@@ -1,119 +1,97 @@
 package at.hannibal2.skyhanni.api.minecraftevents
 
+import at.hannibal2.skyhanni.SkyHanniMod
+import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.RenderData
 import at.hannibal2.skyhanni.events.render.gui.GameOverlayRenderPostEvent
 import at.hannibal2.skyhanni.events.render.gui.GameOverlayRenderPreEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
+import at.hannibal2.skyhanni.utils.render.item.SkyHanniItemRenderCoordinator
+import at.hannibal2.skyhanni.utils.render.item.SkyHanniPipCoordinatorRenderer
+import net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.DeltaTracker
-import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.resources.ResourceLocation
-//#if MC < 1.21.6
-import net.fabricmc.fabric.api.client.rendering.v1.HudLayerRegistrationCallback
-import net.fabricmc.fabric.api.client.rendering.v1.IdentifiedLayer
-//#else
-//$$ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
-//$$ import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
-//#endif
-//#if MC < 1.21.9
-import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents
-import net.minecraft.client.renderer.MultiBufferSource
-import com.mojang.blaze3d.vertex.PoseStack
-
-//#endif
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.resources.Identifier
 
 @SkyHanniModule
 object RenderEvents {
+    private val config get() = SkyHanniMod.feature.gui
 
     init {
+        HudElementRegistry.attachElementBefore(
+            VanillaHudElements.SLEEP,
+            Identifier.fromNamespaceAndPath("skyhanni", "gui_render_layer"),
+            RenderEvents::postGui
+        )
 
-        // SkyHanniRenderWorldEvent
-        //#if MC < 1.21.9
-        WorldRenderEvents.AFTER_TRANSLUCENT.register { event ->
-            val immediateVertexConsumers = event.consumers() as? MultiBufferSource.BufferSource ?: return@register
-            val stack = event.matrixStack() ?: PoseStack()
-            SkyHanniRenderWorldEvent(
-                stack,
-                event.camera(),
-                immediateVertexConsumers,
-                event.tickCounter().getGameTimeDeltaPartialTick(true),
-            ).post()
-        }
-        //#endif
-
-        // ScreenDrawnEvent
-
-        // GuiScreenOpenEvent
-
-        // GuiMouseInputEvent
-
-        // BlockOverlayRenderEvent
-
-        // GuiActionPerformedEvent
-
-        // InitializeGuiEvent
-
-        //#if MC < 1.21.6
-        HudLayerRegistrationCallback.EVENT.register { context ->
-            context.attachLayerAfter(
-                IdentifiedLayer.SLEEP,
-                ResourceLocation.fromNamespaceAndPath("skyhanni", "gui_render_layer"),
-                RenderEvents::postGui,
+        PictureInPictureRendererRegistry.register { ctx ->
+            SkyHanniPipCoordinatorRenderer(
+                ctx.bufferSource()
             )
         }
-        //#else
-        //$$ HudElementRegistry.attachElementBefore(
-        //$$     VanillaHudElements.SLEEP,
-        //$$     ResourceLocation.fromNamespaceAndPath("skyhanni", "gui_render_layer"),
-        //$$     RenderEvents::postGui
-        //$$ )
-        //#endif
     }
 
-    private fun postGui(context: GuiGraphics, tick: DeltaTracker) {
-        if (Minecraft.getInstance().options.hideGui) return
+    @HandleEvent
+    fun onResourcePackReload() {
+        SkyHanniItemRenderCoordinator.invalidateAtlas()
+    }
+
+    private fun postGui(context: GuiGraphicsExtractor, tick: DeltaTracker) {
+        if (MinecraftCompat.hideGui) return
+        if (config.hideGuiInDebugMenu && MinecraftCompat.showDebugHud) return
         RenderData.postRenderOverlay(context)
     }
 
     // GameOverlayRenderPreEvent
     // todo need to post the rest of these, sadly fapi doesn't have the same layers as 1.8 does
     @JvmStatic
-    fun postHotbarLayerEventPre(context: GuiGraphics): Boolean {
-        return GameOverlayRenderPreEvent(context, RenderLayer.HOTBAR).post()
-    }
+    fun postHotbarLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.HOTBAR).post()
 
     @JvmStatic
-    fun postExperienceBarLayerEventPre(context: GuiGraphics): Boolean {
-        return GameOverlayRenderPreEvent(context, RenderLayer.EXPERIENCE_BAR).post()
-    }
+    fun postExperienceBarLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.EXPERIENCE_BAR).post()
 
     @JvmStatic
-    fun postExperienceNumberLayerEventPre(context: GuiGraphics): Boolean {
-        return GameOverlayRenderPreEvent(context, RenderLayer.EXPERIENCE_NUMBER).post()
-    }
+    fun postExperienceNumberLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.EXPERIENCE_NUMBER).post()
 
     @JvmStatic
-    fun postTablistLayerEventPre(context: GuiGraphics): Boolean {
-        return GameOverlayRenderPreEvent(context, RenderLayer.PLAYER_LIST).post()
-    }
+    fun postTablistLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.PLAYER_LIST).post()
 
     // GameOverlayRenderPostEvent
     // todo need to post the rest of these, sadly fapi doesn't have the same layers as 1.8 does
     @JvmStatic
-    fun postHotbarLayerEventPost(context: GuiGraphics) {
+    fun postHotbarLayerEventPost(context: GuiGraphicsExtractor) =
         GameOverlayRenderPostEvent(context, RenderLayer.HOTBAR).post()
-    }
 
     @JvmStatic
-    fun postExperienceBarLayerEventPost(context: GuiGraphics) {
+    fun postExperienceBarLayerEventPost(context: GuiGraphicsExtractor) =
         GameOverlayRenderPostEvent(context, RenderLayer.EXPERIENCE_BAR).post()
-    }
 
     @JvmStatic
-    fun postExperienceNumberLayerEventPost(context: GuiGraphics) {
+    fun postExperienceNumberLayerEventPost(context: GuiGraphicsExtractor) =
         GameOverlayRenderPostEvent(context, RenderLayer.EXPERIENCE_NUMBER).post()
-    }
+
+    @JvmStatic
+    fun postHeldItemTooltipLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.HELD_ITEM_TOOLTIP).post()
+
+    @JvmStatic
+    fun postHeldItemTooltipLayerEventPost(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPostEvent(context, RenderLayer.HELD_ITEM_TOOLTIP).post()
+
+    @JvmStatic
+    fun postActionBarLayerEventPre(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPreEvent(context, RenderLayer.ACTION_BAR).post()
+
+    @JvmStatic
+    fun postActionBarLayerEventPost(context: GuiGraphicsExtractor) =
+        GameOverlayRenderPostEvent(context, RenderLayer.ACTION_BAR).post()
 }
 
 enum class RenderLayer {
@@ -134,7 +112,7 @@ enum class RenderLayer {
     CHAT,
     PLAYER_LIST,
     DEBUG,
-
-    // Not a real forge layer but is used on modern Minecraft versions
+    HELD_ITEM_TOOLTIP,
+    ACTION_BAR,
     EXPERIENCE_NUMBER,
 }

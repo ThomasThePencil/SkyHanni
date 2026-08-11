@@ -3,6 +3,7 @@ package at.hannibal2.skyhanni.utils
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
+import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
@@ -23,11 +24,12 @@ class MinecraftConsoleFilter(private val loggerConfigName: String) : AbstractFil
     private val config get() = SkyHanniMod.feature.dev.minecraftConsoles
     private val filterConfig get() = config.consoleFilter
 
-    private val loggerFiltered = LorenzLogger("debug/mc_console/filtered")
-    private val loggerUnfiltered = LorenzLogger("debug/mc_console/unfiltered")
+    private val loggerFiltered = SkyHanniLogger("debug/mc_console/filtered")
+    private val loggerUnfiltered = SkyHanniLogger("debug/mc_console/unfiltered")
 
     private val patternBiomeIdBounds = "Biome ID is out of bounds: (\\d+), defaulting to 0 \\(Ocean\\)".toPattern()
 
+    @SkyHanniModule
     companion object {
 
         fun initLogging() {
@@ -37,9 +39,40 @@ class MinecraftConsoleFilter(private val loggerConfigName: String) : AbstractFil
                 val loggerName = loggerConfig.name
                 loggerConfig.addFilter(MinecraftConsoleFilter(loggerName))
             }
+            ctx.configuration.rootLogger.addFilter(MinecraftConsoleFilter("root"))
+        }
+
+        @HandleEvent
+        private fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
+            event.move(3, "dev.printUnfilteredDebugs", "dev.minecraftConsoles.printUnfilteredDebugs")
+            event.move(3, "dev.logUnfilteredFile", "dev.minecraftConsoles.logUnfilteredFile")
+            event.move(
+                3,
+                "dev.printUnfilteredDebugsOutsideSkyBlock",
+                "dev.minecraftConsoles.printUnfilteredDebugsOutsideSkyBlock",
+            )
+            event.move(3, "dev.printFilteredReason", "dev.minecraftConsoles.printFilteredReason")
+            event.move(3, "dev.filterChat", "dev.minecraftConsoles.consoleFilter.filterChat")
+            event.move(3, "dev.filterGrowBuffer", "dev.minecraftConsoles.consoleFilter.filterGrowBuffer")
+            event.move(3, "dev.filterUnknownSound", "dev.minecraftConsoles.consoleFilter.filterUnknownSound")
+            event.move(
+                3,
+                "dev.filterParticleVillagerHappy",
+                "dev.minecraftConsoles.consoleFilter.filterParticleVillagerHappy",
+            )
+            event.move(
+                3,
+                "dev.filterAmsHelperTransformer",
+                "dev.minecraftConsoles.consoleFilter.filterAmsHelperTransformer",
+            )
+            event.move(3, "dev.filterAsmHelperApplying", "dev.minecraftConsoles.consoleFilter.filterAsmHelperApplying")
+            event.move(3, "dev.filterBiomeIdBounds", "dev.minecraftConsoles.consoleFilter.filterBiomeIdBounds")
+            event.move(3, "dev.filterScoreboardErrors", "dev.minecraftConsoles.consoleFilter.filterScoreboardErrors")
+            event.move(3, "dev.filterOptiFine", "dev.minecraftConsoles.consoleFilter.filterOptiFine")
         }
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     override fun filter(event: LogEvent?): Filter.Result {
         if (event == null) return Filter.Result.ACCEPT
 
@@ -122,6 +155,86 @@ class MinecraftConsoleFilter(private val loggerConfigName: String) : AbstractFil
                 filterConsole("Biome ID bounds")
                 return Filter.Result.DENY
             }
+        }
+
+        if (filterConfig.filterInvalidSkinSignature && (
+                formattedMessage.startsWith("Failed to verify signature on property") ||
+                    formattedMessage.startsWith("Profile contained invalid signature for textures property") ||
+                    formattedMessage.startsWith("Malformed signature encoding on property")
+                )
+        ) {
+            filterConsole("invalid skin signature")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterDynamicTransformsUbo &&
+            formattedMessage.startsWith("Resizing Dynamic Transforms UBO")
+        ) {
+            filterConsole("dynamic transforms UBO resize")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterCommandAmbiguity &&
+            loggerName.endsWith("ClientCommandInternals") &&
+            formattedMessage.startsWith("Ambiguity between arguments [")
+        ) {
+            filterConsole("command ambiguity")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterNarratorError &&
+            formattedMessage.startsWith("Error while loading the narrator")
+        ) {
+            filterConsole("narrator load error")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterMixinMessages && loggerName == "FabricLoader/Mixin") {
+            filterConsole("mixin message")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterUnknownTeam &&
+            formattedMessage.startsWith("Received packet for unknown team ")
+        ) {
+            filterConsole("unknown team packet")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterUnknownPassengers &&
+            formattedMessage == "Received passengers for unknown entity"
+        ) {
+            filterConsole("unknown entity passengers")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterMissingTextureReferences &&
+            formattedMessage.startsWith("Missing texture references in model ")
+        ) {
+            filterConsole("missing texture references")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterAtlasCreated &&
+            formattedMessage.startsWith("Created: ") &&
+            formattedMessage.endsWith("-atlas")
+        ) {
+            filterConsole("texture atlas created")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterExistingTeam &&
+            formattedMessage.startsWith("Requested creation of existing team ")
+        ) {
+            filterConsole("existing team creation")
+            return Filter.Result.DENY
+        }
+
+        if (filterConfig.filterChunkSectionsUbo &&
+            formattedMessage.startsWith("Resizing Chunk Sections UBO")
+        ) {
+            filterConsole("chunk sections UBO resize")
+            return Filter.Result.DENY
         }
 
         if (filterScoreboardErrors(event)) return Filter.Result.DENY
@@ -241,34 +354,5 @@ class MinecraftConsoleFilter(private val loggerConfigName: String) : AbstractFil
         t: Throwable?,
     ): Filter.Result {
         return Filter.Result.ACCEPT
-    }
-
-    @HandleEvent
-    fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
-        event.move(3, "dev.printUnfilteredDebugs", "dev.minecraftConsoles.printUnfilteredDebugs")
-        event.move(3, "dev.logUnfilteredFile", "dev.minecraftConsoles.logUnfilteredFile")
-        event.move(
-            3,
-            "dev.printUnfilteredDebugsOutsideSkyBlock",
-            "dev.minecraftConsoles.printUnfilteredDebugsOutsideSkyBlock",
-        )
-        event.move(3, "dev.printFilteredReason", "dev.minecraftConsoles.printFilteredReason")
-        event.move(3, "dev.filterChat", "dev.minecraftConsoles.consoleFilter.filterChat")
-        event.move(3, "dev.filterGrowBuffer", "dev.minecraftConsoles.consoleFilter.filterGrowBuffer")
-        event.move(3, "dev.filterUnknownSound", "dev.minecraftConsoles.consoleFilter.filterUnknownSound")
-        event.move(
-            3,
-            "dev.filterParticleVillagerHappy",
-            "dev.minecraftConsoles.consoleFilter.filterParticleVillagerHappy",
-        )
-        event.move(
-            3,
-            "dev.filterAmsHelperTransformer",
-            "dev.minecraftConsoles.consoleFilter.filterAmsHelperTransformer",
-        )
-        event.move(3, "dev.filterAsmHelperApplying", "dev.minecraftConsoles.consoleFilter.filterAsmHelperApplying")
-        event.move(3, "dev.filterBiomeIdBounds", "dev.minecraftConsoles.consoleFilter.filterBiomeIdBounds")
-        event.move(3, "dev.filterScoreboardErrors", "dev.minecraftConsoles.consoleFilter.filterScoreboardErrors")
-        event.move(3, "dev.filterOptiFine", "dev.minecraftConsoles.consoleFilter.filterOptiFine")
     }
 }

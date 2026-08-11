@@ -10,7 +10,7 @@ import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.BlockUtils.getBlockAt
 import at.hannibal2.skyhanni.utils.ColorUtils.toColor
-import at.hannibal2.skyhanni.utils.EntityUtils.getWornSkullTexture
+import at.hannibal2.skyhanni.utils.EntityUtils.holdingSkullTexture
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.SkullTextureHolder
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
@@ -24,14 +24,14 @@ import net.minecraft.world.entity.decoration.ArmorStand
 object ThunderSparksHighlight {
 
     private val config get() = SkyHanniMod.feature.fishing.thunderSpark
-    private val THUNDER_SPARK_TEXTURE by lazy { SkullTextureHolder.getTexture("THUNDER_SPARK") }
+    private val THUNDER_SPARK_TEXTURE by SkullTextureHolder.texture("THUNDER_SPARK")
     private val sparks = mutableSetOf<ArmorStand>()
 
     @HandleEvent
     fun onEntityEquipmentChange(event: EntityEquipmentChangeEvent<ArmorStand>) {
         if (!isEnabled()) return
         val entity = event.entity
-        if (entity.getWornSkullTexture() == THUNDER_SPARK_TEXTURE) sparks.add(entity)
+        if (entity.holdingSkullTexture(THUNDER_SPARK_TEXTURE)) sparks.add(entity)
     }
 
     @HandleEvent
@@ -65,11 +65,13 @@ object ThunderSparksHighlight {
     }
 
     private fun isEnabled() =
-        (IslandType.CRIMSON_ISLE.isCurrent() || SkyBlockUtils.isStrandedProfile) && config.highlight
+        (IslandType.CRIMSON_ISLE.isInIsland() || SkyBlockUtils.isStrandedProfile) && config.highlight
 
     @HandleEvent
     fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
         event.move(3, "fishing.thunderSparkHighlight", "fishing.thunderSpark.highlight")
         event.move(3, "fishing.thunderSparkColor", "fishing.thunderSpark.color")
     }
+
+    fun getActiveSparks(): Set<ArmorStand> = sparks
 }

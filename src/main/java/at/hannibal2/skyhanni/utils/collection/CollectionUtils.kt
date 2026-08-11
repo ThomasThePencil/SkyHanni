@@ -2,17 +2,19 @@ package at.hannibal2.skyhanni.utils.collection
 
 import at.hannibal2.skyhanni.utils.MinMaxNumber
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import java.util.Collections
 import java.util.EnumMap
 import java.util.PriorityQueue
 import java.util.Queue
 import java.util.WeakHashMap
 import java.util.regex.Pattern
+import kotlin.collections.filterNot
 import kotlin.math.ceil
+import kotlin.reflect.KClass
 import kotlin.time.Duration
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 @Suppress("TooManyFunctions")
 object CollectionUtils {
@@ -107,7 +109,7 @@ object CollectionUtils {
      */
     inline fun <K, V : Number, R> Map<K, V>.subtract(
         other: Map<K, V>,
-        transform: (Double) -> R
+        transform: (Double) -> R,
     ): Map<K, R> = (keys + other.keys).associateWith { k ->
         val diff = (this[k]?.toDouble() ?: 0.0) - (other[k]?.toDouble() ?: 0.0)
         transform(diff)
@@ -120,7 +122,7 @@ object CollectionUtils {
         map { it.value }.runningFold(initial, operation).zip(map { it.index }) { value, index -> IndexedValue(index, value) }
 
     suspend inline fun <T, R> Iterable<T>.mapAsync(
-        crossinline transform: (T) -> R
+        crossinline transform: (T) -> R,
     ): List<R> = coroutineScope {
         map {
             async { transform(it) }
@@ -128,7 +130,7 @@ object CollectionUtils {
     }
 
     suspend inline fun <T, R> Iterable<T>.mapNotNullAsync(
-        crossinline transform: (T) -> R?
+        crossinline transform: (T) -> R?,
     ): List<R> = coroutineScope {
         mapNotNull {
             async { transform(it) }
@@ -330,6 +332,8 @@ object CollectionUtils {
         return list
     }
 
+    fun <T> Array<T>.takeIfNotEmpty(): Array<T>? = takeIf { it.isNotEmpty() }
+
     fun <T, C : Collection<T>> C.takeIfNotEmpty(): C? = takeIf { it.isNotEmpty() }
 
     fun <K, V> Map<K, V>.takeIfNotEmpty(): Map<K, V>? = takeIf { it.isNotEmpty() }
@@ -410,11 +414,6 @@ object CollectionUtils {
 
     inline fun <reified C : Collection<T>, T : Collection<T2>, T2> C.filterNotEmpty(): C =
         filter { it.isNotEmpty() } as C
-
-    fun <K, V : Any> Map<K?, V>.filterNotNullKeys(): Map<K, V> {
-        @Suppress("UNCHECKED_CAST")
-        return filterKeys { it != null } as Map<K, V>
-    }
 
     fun <K, V> Map<K, V>.containsKeys(vararg keys: K) = keys.all { this.keys.contains(it) }
 
@@ -559,6 +558,26 @@ object CollectionUtils {
         retainAll(sequence.toSet())
     }
 
-    fun <T> Set<T>.optionalEmpty(): Set<T> = if (isEmpty()) emptySet() else this
+    inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> =
+        mapNotNull(transform).toMap()
 
+    fun <T> Collection<T>.filterNotClass(clazz: KClass<*>): List<T> = filterNot { clazz.isInstance(it) }
+
+    fun <K, V> Map<out K, V>.filterNotNull(): Map<K & Any, V & Any> = buildMap {
+        for ((k, v) in this@filterNotNull) {
+            if (k != null && v != null) put(k, v)
+        }
+    }
+
+    fun <K, V> Map<out K, V>.filterNotNullKeys(): Map<K & Any, V> = buildMap {
+        for ((k, v) in this@filterNotNullKeys) {
+            if (k != null) put(k, v)
+        }
+    }
+
+    fun <K, V> Map<out K, V>.filterNotNullValues(): Map<K, V & Any> = buildMap {
+        for ((k, v) in this@filterNotNullValues) {
+            if (v != null) put(k, v)
+        }
+    }
 }

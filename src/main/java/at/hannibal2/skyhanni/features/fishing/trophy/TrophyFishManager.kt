@@ -6,41 +6,53 @@ import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.jsonobjects.repo.TrophyFishInfo
 import at.hannibal2.skyhanni.data.jsonobjects.repo.TrophyFishJson
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
-import at.hannibal2.skyhanni.events.NeuProfileDataLoadedEvent
+import at.hannibal2.skyhanni.events.ProfileViewerDataLoadedEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.InventoryDetector
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
+import at.hannibal2.skyhanni.utils.ItemUtils.getCleanLore
 import at.hannibal2.skyhanni.utils.NumberUtil.formatInt
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.compat.defaultStyleConstructor
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.compat.setHoverShowText
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import net.minecraft.network.chat.Style
 
 @SkyHanniModule
 object TrophyFishManager {
+
     private val config get() = SkyHanniMod.feature.fishing.trophyFishing
 
     private val patternGroup = RepoPattern.group("fishing.trophyfish")
 
     /**
-     * REGEX-TEST: §6Gold §a✔§7 (1)
+     * REGEX-TEST: Gold ✔ (1)
      */
     private val odgerRankPattern by patternGroup.pattern(
-        "odger.rank",
-        "§.(?<rarity>.*) §a✔§7 \\((?<amount>.*)\\)",
+        "odger.rank.colorless",
+        "(?: +)?(?<rarity>.*) ✔ \\((?<amount>.*)\\)",
     )
 
     /**
-     * REGEX-TEST: §bDiamond §c✖
+     * REGEX-TEST: Diamond ✖
      */
     private val odgerRankEmptyPattern by patternGroup.pattern(
-        "odger.rank.empty",
-        "§.(?<rarity>.*) §c✖",
+        "odger.rank.empty.colorless",
+        "(?: +)?(?<rarity>.*) ✖",
     )
+
+    /**
+     * REGEX-TEST: Trophy Fish
+     */
+    private val odgerInventoryNamePattern by patternGroup.pattern(
+        "odger.inventory",
+        "Trophy Fish",
+    )
+
+    val odgerInventory = InventoryDetector { odgerInventoryNamePattern }
 
     fun loadMissingTrophyFish(): Int {
         val savedFishes = fish ?: return 0
@@ -65,20 +77,20 @@ object TrophyFishManager {
     val fish: MutableMap<String, MutableMap<TrophyRarity, Int>>?
         get() = ProfileStorageData.profileSpecific?.crimsonIsle?.trophyFishes
 
-    private var loadedNeu = false
+    private var loadedPV = false
 
     @HandleEvent
-    fun onNeuProfileDataLoaded(event: NeuProfileDataLoadedEvent) {
-        if (loadedNeu || !config.loadFromNeuPV) return
+    fun onProfileViewerDataLoaded(event: ProfileViewerDataLoadedEvent) {
+        if (loadedPV || !config.loadFromNeuPV) return
 
         val caughtTrophyFish = event.getCurrentPlayerData()?.trophyFish?.caught ?: return
 
-        loadedNeu = true
+        loadedPV = true
 
         val savedFishes = fish ?: return
         var changed = false
 
-        val neuData = mutableListOf<Triple<String, TrophyRarity, Int>>()
+        val pvData = mutableListOf<Triple<String, TrophyRarity, Int>>()
         for ((fishName, apiAmount) in caughtTrophyFish) {
             val rarity = TrophyRarity.getByName(fishName) ?: continue
             val name = fishName.split("_").dropLast(1).joinToString("")
@@ -86,7 +98,7 @@ object TrophyFishManager {
             val savedFishData = savedFishes.getOrPut(name) { mutableMapOf() }
 
             val currentSavedAmount = savedFishData[rarity] ?: 0
-            neuData.add(Triple(name, rarity, apiAmount))
+            pvData.add(Triple(name, rarity, apiAmount))
             if (apiAmount > currentSavedAmount) {
                 changed = true
             }
@@ -97,7 +109,7 @@ object TrophyFishManager {
             ChatUtils.clickableChat(
                 message,
                 onClick = {
-                    updateFromNeuPv(savedFishes, neuData)
+                    updateFromPv(savedFishes, pvData)
                 },
                 "§eClick to load!",
                 oneTimeClick = true,
@@ -106,26 +118,27 @@ object TrophyFishManager {
     }
 
     // Fetch when talking with Odger
-    @HandleEvent
+    // Not island-gated because Odger has an Abiphone contact
+    @HandleEvent(onlyOnSkyblock = true)
     fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
-        if (event.inventoryName != "Trophy Fishing") return
+        if (event.inventoryName != "Trophy Fish") return
 
         var updatedFishes = loadMissingTrophyFish()
         val savedFishes = fish ?: return
         for (stack in event.inventoryItems.values) {
-            val internalName = TrophyFishApi.getInternalName(stack.hoverName.formattedTextCompatLeadingWhiteLessResets().replace("§k", ""))
+            val internalName = TrophyFishApi.getInternalName(stack.cleanName)
 
             fun getRarity(rawRarity: String, line: String): TrophyRarity =
                 TrophyRarity.getByName(rawRarity) ?: ErrorManager.skyHanniError(
                     "unknown trophy fish rarity in odger inventory",
                     "rawRarity" to rawRarity,
                     "line" to line,
-                    "stack.name" to stack.hoverName.formattedTextCompatLeadingWhiteLessResets(),
+                    "stack.name" to stack.cleanName,
                     "internalName" to internalName,
                 )
 
             var updated = false
-            for (line in stack.getLore()) {
+            for (line in stack.getCleanLore()) {
                 val (rarity, amount) = odgerRankPattern.matchMatcher(line) {
                     val rarity = getRarity(group("rarity"), line)
                     val amount = group("amount").formatInt()
@@ -152,11 +165,11 @@ object TrophyFishManager {
         }
     }
 
-    private fun updateFromNeuPv(
+    private fun updateFromPv(
         savedFishes: Map<String, MutableMap<TrophyRarity, Int>>,
-        neuData: List<Triple<String, TrophyRarity, Int>>,
+        pvData: List<Triple<String, TrophyRarity, Int>>,
     ) {
-        for ((name, rarity, newValue) in neuData) {
+        for ((name, rarity, newValue) in pvData) {
             val saved = savedFishes[name] ?: continue
 
             val current = saved[rarity] ?: 0

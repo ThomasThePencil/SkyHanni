@@ -23,6 +23,23 @@ enum class VisitorReward(rawInternalName: String, val displayName: String) {
     HARVEST_HARBINGER("POTION_HARVEST_HARBINGER;5", "§9Harvest Harbinger V"),
     HYPERCHARGE_CHIP("HYPERCHARGE_GARDEN_CHIP", "§9Hypercharge Chip"),
     QUICKDRAW_CHIP("QUICKDRAW_GARDEN_CHIP", "§9Quickdraw Chip"),
+    FARMING_EXP_BOOST_EPIC("PET_ITEM_FARMING_SKILL_BOOST_EPIC", "§5Farming Exp Boost"),
+    UNFULFILLED_JERRYSEED("UNFULFILLED_JERRYSEED", "§aUnfulfilled Jerryseed"),
+    VOTER_BADGE("VOTER_BADGE", "§fVoter's Badge"),
+    VOTER_BADGE_VIP("VOTER_BADGE_VIP", "§aVIP Voter's Badge"),
+    VOTER_BADGE_ELITE("VOTER_BADGE_ELITE", "§9Elite Voter's Badge"),
+    VOTER_BADGE_SUPREME("VOTER_BADGE_SUPREME", "§5Supreme Voter's Badge"),
+    DYE_WILD_STRAWBERRY("DYE_WILD_STRAWBERRY", "§dWild Strawberry Dye"),
+    VELVET_TOP_HAT("VELVET_TOP_HAT", "§9Velvet Top Hat"),
+    CASHMERE_JACKET("CASHMERE_JACKET", "§9Cashmere Jacket"),
+    SATIN_TROUSERS("SATIN_TROUSERS", "§9Satin Trousers"),
+    OXFORD_SHOES("OXFORD_SHOES", "§9Oxford Shoes"),
+    CARNIVAL_TICKET("CARNIVAL_TICKET", "§aCarnival Ticket"),
+    VISITORS_GRATITUDE("VISITORS_GRATITUDE", "§fVisitors' Gratitude"),
+    FARMING_CONTEST_DISPLAY("FARMING_CONTEST_DISPLAY", "§aFarming Contest Display"),
+    ASTRONAUT_PERSONALITY("ASTRONAUT_PERSONALITY", "§fAstronaut Minion Skin"),
+    FAST_FOOD_BARN_SKIN("FAST_FOOD_BARN_SKIN", "§6Fast Food Barn Skin"),
+    JELLY_GREENHOUSE_SKIN("JELLY_GREENHOUSE_SKIN", "§6Jelly Garden Greenhouse Skin"),
     ;
 
     private val internalName = rawInternalName.toInternalName()
@@ -35,6 +52,7 @@ enum class VisitorReward(rawInternalName: String, val displayName: String) {
     }
 
     // Todo: Remove this when enum names of this and DropsStatisticsTextEntry are in sync
+    // TODO never hide an error entirely
     fun toStatsTextEntryOrNull() = when (this) {
         DEDICATION -> StatsEntry.DEDICATION_IV
         MUSIC_RUNE -> StatsEntry.MUSIC_RUNE_I
@@ -43,7 +61,7 @@ enum class VisitorReward(rawInternalName: String, val displayName: String) {
         else -> {
             try {
                 StatsEntry.valueOf(name)
-            } catch (e: IllegalArgumentException) {
+            } catch (_: IllegalArgumentException) {
                 null
             }
         }

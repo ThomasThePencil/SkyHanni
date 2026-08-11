@@ -39,6 +39,18 @@ class DropsStatisticsConfig {
             DropsStatisticsTextEntry.COPPER_DYE,
             DropsStatisticsTextEntry.HYPERCHARGE_CHIP,
             DropsStatisticsTextEntry.QUICKDRAW_CHIP,
+            DropsStatisticsTextEntry.FARMING_EXP_BOOST_EPIC,
+            DropsStatisticsTextEntry.UNFULFILLED_JERRYSEED,
+            DropsStatisticsTextEntry.VOTER_BADGE,
+            DropsStatisticsTextEntry.VOTER_BADGE_VIP,
+            DropsStatisticsTextEntry.VOTER_BADGE_ELITE,
+            DropsStatisticsTextEntry.VOTER_BADGE_SUPREME,
+            DropsStatisticsTextEntry.VISITORS_GRATITUDE,
+            DropsStatisticsTextEntry.FARMING_CONTEST_DISPLAY,
+            DropsStatisticsTextEntry.ASTRONAUT_PERSONALITY,
+            DropsStatisticsTextEntry.FAST_FOOD_BARN_SKIN,
+            DropsStatisticsTextEntry.JELLY_GREENHOUSE_SKIN,
+
         )
     )
 
@@ -79,6 +91,22 @@ class DropsStatisticsConfig {
         HARVEST_HARBINGER("§b1 §9Harvest Harbinger V"),
         HYPERCHARGE_CHIP("§b3 §9Hypercharge Chip"),
         QUICKDRAW_CHIP("§b7 §9Quickdraw Chip"),
+        FARMING_EXP_BOOST_EPIC("§b2 §5Farming Exp Boost"),
+        UNFULFILLED_JERRYSEED("§b3 §aUnfulfilled Jerryseed"),
+        VOTER_BADGE("§b1 §fVoter's Badge"),
+        VOTER_BADGE_VIP("§b1 §aVIP Voter's Badge"),
+        VOTER_BADGE_ELITE("§b1 §9Elite Voter's Badge"),
+        VOTER_BADGE_SUPREME("§b1 §5Supreme Voter's Badge"),
+        DYE_WILD_STRAWBERRY("§b2 §dWild Strawberry Dye"),
+        VELVET_TOP_HAT("§b5 §9Velvet Top Hat"),
+        CASHMERE_JACKET("§b6 §9Cashmere Jacket"),
+        SATIN_TROUSERS("§b4 §9Satin Trousers"),
+        OXFORD_SHOES("§b7 §9Oxford Shoes"),
+        VISITORS_GRATITUDE("§b7 §fVisitors' Gratitude"),
+        FARMING_CONTEST_DISPLAY("§b3 §aFarming Contest Display"),
+        ASTRONAUT_PERSONALITY("§b1 §fAstronaut Minion Skin"),
+        FAST_FOOD_BARN_SKIN("§b2 §6Fast Food Barn Skin"),
+        JELLY_GREENHOUSE_SKIN("§b2 §6Jelly Garden Greenhouse Skin"),
         ;
 
         override fun toString() = displayName

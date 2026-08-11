@@ -19,14 +19,14 @@ import at.hannibal2.skyhanni.utils.NumberUtil.shortFormat
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addSearchString
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.Searchable
 import at.hannibal2.skyhanni.utils.renderables.toSearchable
 import at.hannibal2.skyhanni.utils.tracker.ItemTrackerData
+import at.hannibal2.skyhanni.utils.tracker.SessionUptime
 import at.hannibal2.skyhanni.utils.tracker.SkyHanniItemTracker
-import at.hannibal2.skyhanni.utils.tracker.SkyHanniTracker
 import com.google.gson.annotations.Expose
-import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 
 @SkyHanniModule
@@ -38,13 +38,14 @@ object ExcavatorProfitTracker {
         "Fossil Excavation Profit Tracker",
         ::Data,
         { it.mining.fossilExcavatorProfitTracker },
+        trackerConfig = { config.perTrackerConfig }
     ) { drawDisplay(it) }
 
     data class Data(
         @Expose var timesExcavated: Long = 0L,
         @Expose var glacitePowderGained: Long = 0L,
         @Expose var fossilDustGained: Long = 0L,
-    ) : ItemTrackerData() {
+    ) : ItemTrackerData<SessionUptime.Normal>(SessionUptime.Normal::class) {
         override fun getDescription(timesGained: Long): List<String> {
             val percentage = timesGained.toDouble() / timesExcavated
             val dropRate = percentage.coerceAtMost(1.0).formatPercentage()
@@ -90,7 +91,7 @@ object ExcavatorProfitTracker {
         profit: Double,
     ): Double {
         if (fossilDustGained <= 0) return profit
-        val pricePer = SkyHanniTracker.getPricePer(scrapItem) / 500
+        val pricePer = tracker.getPricePer(scrapItem) / 500
         val fossilDustPrice = pricePer * fossilDustGained
         add(
             Renderable.hoverTips(
@@ -126,8 +127,7 @@ object ExcavatorProfitTracker {
         profit: Double,
     ): Double {
         if (timesExcavated <= 0) return profit
-        // TODO use same price source as profit tracker
-        val scrapPrice = timesExcavated * SkyHanniTracker.getPricePer(scrapItem)
+        val scrapPrice = timesExcavated * tracker.getPricePer(scrapItem)
         val name = StringUtils.pluralize(timesExcavated.toInt(), scrapItem.repoItemName)
         add(
             Renderable.hoverTips(
@@ -202,7 +202,7 @@ object ExcavatorProfitTracker {
     private fun shouldShowDisplay(): Boolean {
         if (!config.enabled) return false
         if (!isEnabled()) return false
-        if (Minecraft.getInstance().screen !is ContainerScreen) return true
+        if (MinecraftCompat.screen !is ContainerScreen) return true
         // Only show in excavation menu
         return FossilExcavatorApi.inExcavatorMenu
     }
@@ -214,14 +214,14 @@ object ExcavatorProfitTracker {
         }
     }
 
-    private fun isEnabled() = IslandType.DWARVEN_MINES.isCurrent() && SkyBlockUtils.graphArea == "Fossil Research Center"
+    private fun isEnabled() = IslandType.DWARVEN_MINES.isInIsland() && SkyBlockUtils.graphArea == "Fossil Research Center"
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shresetexcavatortracker") {
+        event.registerBrigadier("shresetexcavatortracker") {
             description = "Resets the Fossil Excavator Profit Tracker"
             category = CommandCategory.USERS_RESET
-            callback { tracker.resetCommand() }
+            simpleCallback { tracker.resetCommand() }
         }
     }
 }

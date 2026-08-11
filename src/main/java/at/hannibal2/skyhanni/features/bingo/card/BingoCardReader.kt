@@ -13,13 +13,13 @@ import at.hannibal2.skyhanni.features.bingo.card.goals.GoalType
 import at.hannibal2.skyhanni.features.bingo.card.goals.HiddenGoalData
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.TimeUtils
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import kotlin.time.Duration
 
@@ -53,16 +53,14 @@ object BingoCardReader {
                 lore.any { it.endsWith("Community Goal") } -> GoalType.COMMUNITY
                 else -> continue
             }
-            val name = stack.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()
-            var index = 0
+            val name = stack.cleanName
             val builder = StringBuilder()
-            for (s in lore) {
+            for ((index, s) in lore.withIndex()) {
                 if (index > 1) {
                     if (s == "") break
                     builder.append(s)
                     builder.append(" ")
                 }
-                index++
             }
             var description = builder.toString()
             if (description.endsWith(" ")) {
@@ -152,7 +150,7 @@ object BingoCardReader {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!SkyBlockUtils.isBingoProfile) return
         if (!config.enabled) return
 

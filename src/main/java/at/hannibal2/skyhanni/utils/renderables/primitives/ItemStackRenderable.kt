@@ -6,111 +6,70 @@ import at.hannibal2.skyhanni.utils.NeuItemStackProvider
 import at.hannibal2.skyhanni.utils.NeuItems
 import at.hannibal2.skyhanni.utils.RenderUtils.HorizontalAlignment
 import at.hannibal2.skyhanni.utils.RenderUtils.VerticalAlignment
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.compat.getTooltipCompat
+import at.hannibal2.skyhanni.utils.renderables.ItemStackProvider
 import at.hannibal2.skyhanni.utils.renderables.Renderable
-import net.minecraft.world.item.ItemStack
+import at.hannibal2.skyhanni.utils.system.PropertyVar
+import io.github.notenoughupdates.moulconfig.observer.Property
 
-open class ItemStackRenderable protected constructor(
-    private val stackGetter: () -> ItemStack,
-    val scale: Double = NeuItems.ITEM_FONT_SIZE,
-    val xSpacing: Int = 2,
-    ySpacing: Int = 1,
-    val rescaleSkulls: Boolean = true,
-    override val horizontalAlign: HorizontalAlignment = HorizontalAlignment.LEFT,
-    override val verticalAlign: VerticalAlignment = VerticalAlignment.CENTER,
+open class ItemStackRenderable internal constructor(
+    open val config: ItemRenderableConfig,
+    private val stackGetter: () -> SafeItemStack = { SafeItemStack.EMPTY },
 ) : Renderable {
+    private val scaledSize get() = (15.5 * config.scale + 0.5).toInt()
+    override val width: Int get() = scaledSize + config.xSpacing
+    override val height: Int get() = scaledSize + config.ySpacing
+    override val horizontalAlign get() = config.horizontalAlign
+    override val verticalAlign get() = config.verticalAlign
 
-    open val stack: ItemStack get() = stackGetter()
-
-    override val width = (15.5 * scale + 0.5).toInt() + xSpacing
-    override val height = (15.5 * scale + 0.5).toInt() + ySpacing
+    open val stack: SafeItemStack get() = stackGetter()
+    var stableRenderId: Int? = null
+    open fun getStableId() = stableRenderId
 
     override fun render(mouseOffsetX: Int, mouseOffsetY: Int) {
-        stack.renderOnScreen(
-            xSpacing / 2f,
-            0f,
-            scaleMultiplier = scale,
-            rescaleSkulls,
+        this.stableRenderId = stack.renderOnScreen(
+            this.config.xSpacing / 2f,
+            this.config.ySpacing / 2f,
+            this.config,
+            stableRenderId = this.stableRenderId,
         )
     }
 
     fun withTip(advancedTooltipCompat: Boolean = false) = Renderable.hoverTips(
-        stack,
+        this@ItemStackRenderable,
         stack.getTooltipCompat(advancedTooltipCompat),
         stack = stack,
     )
 
     companion object {
-        fun Renderable.Companion.item(
-            stackGetter: () -> ItemStack,
-            scale: Double = NeuItems.ITEM_FONT_SIZE,
-            xSpacing: Int = 2,
-            ySpacing: Int = 1,
-            rescaleSkulls: Boolean = true,
-            horizontalAlign: HorizontalAlignment = HorizontalAlignment.LEFT,
-            verticalAlign: VerticalAlignment = VerticalAlignment.CENTER,
-        ) = ItemStackRenderable(
-            stackGetter = stackGetter,
-            scale = scale,
-            xSpacing = xSpacing,
-            ySpacing = ySpacing,
-            rescaleSkulls = rescaleSkulls,
-            horizontalAlign = horizontalAlign,
-            verticalAlign = verticalAlign,
-        )
+        fun Renderable.Companion.item(stack: SafeItemStack, config: ItemRenderableConfig) =
+            ItemStackRenderable(config) { stack }
 
-        fun Renderable.Companion.item(
-            stack: ItemStack,
-            scale: Double = NeuItems.ITEM_FONT_SIZE,
-            xSpacing: Int = 2,
-            ySpacing: Int = 1,
-            rescaleSkulls: Boolean = true,
-            horizontalAlign: HorizontalAlignment = HorizontalAlignment.LEFT,
-            verticalAlign: VerticalAlignment = VerticalAlignment.CENTER,
-        ) = ItemStackRenderable(
-            stackGetter = { stack },
-            scale = scale,
-            xSpacing = xSpacing,
-            ySpacing = ySpacing,
-            rescaleSkulls = rescaleSkulls,
-            horizontalAlign = horizontalAlign,
-            verticalAlign = verticalAlign,
-        )
+        fun Renderable.Companion.item(stackGetter: () -> SafeItemStack, config: ItemRenderableConfig.() -> Unit = {}) =
+            ItemStackRenderable(ItemRenderableConfig().apply(config), stackGetter)
 
-        fun Renderable.Companion.item(
-            provider: NeuItemStackProvider,
-            scale: Double = NeuItems.ITEM_FONT_SIZE,
-            xSpacing: Int = 2,
-            ySpacing: Int = 1,
-            rescaleSkulls: Boolean = true,
-            horizontalAlign: HorizontalAlignment = HorizontalAlignment.LEFT,
-            verticalAlign: VerticalAlignment = VerticalAlignment.CENTER,
-        ) = ItemStackRenderable(
-            stackGetter = provider::stack,
-            scale = scale,
-            xSpacing = xSpacing,
-            ySpacing = ySpacing,
-            rescaleSkulls = rescaleSkulls,
-            horizontalAlign = horizontalAlign,
-            verticalAlign = verticalAlign,
-        )
+        fun Renderable.Companion.item(stack: SafeItemStack, config: ItemRenderableConfig.() -> Unit = {}) =
+            item({ stack }, config)
 
-        fun Renderable.Companion.item(
-            item: NeuInternalName,
-            scale: Double = NeuItems.ITEM_FONT_SIZE,
-            xSpacing: Int = 2,
-            ySpacing: Int = 1,
-            rescaleSkulls: Boolean = true,
-            horizontalAlign: HorizontalAlignment = HorizontalAlignment.LEFT,
-            verticalAlign: VerticalAlignment = VerticalAlignment.CENTER,
-        ) = item(
-            provider = NeuItemStackProvider(item),
-            scale = scale,
-            xSpacing = xSpacing,
-            ySpacing = ySpacing,
-            rescaleSkulls = rescaleSkulls,
-            horizontalAlign = horizontalAlign,
-            verticalAlign = verticalAlign,
-        )
+        fun Renderable.Companion.item(provider: ItemStackProvider, config: ItemRenderableConfig.() -> Unit = {}) =
+            item(provider::stack, config)
+
+        fun Renderable.Companion.item(item: NeuInternalName, config: ItemRenderableConfig.() -> Unit = {}) =
+            item(NeuItemStackProvider(item), config)
+    }
+}
+
+open class ItemRenderableConfig(selfOp: ItemRenderableConfig.() -> Unit = {}) {
+    open var scale: Double by PropertyVar(NeuItems.ITEM_FONT_SIZE)
+    open var xSpacing: Int by PropertyVar(2)
+    open var ySpacing: Int by PropertyVar(1)
+    open var rescaleSkulls: Boolean by PropertyVar(true)
+    open var horizontalAlign: HorizontalAlignment by PropertyVar(HorizontalAlignment.LEFT)
+    open var verticalAlign: VerticalAlignment by PropertyVar { Property.of(VerticalAlignment.CENTER) }
+    open var alpha: Float by PropertyVar(1f)
+
+    init {
+        selfOp()
     }
 }

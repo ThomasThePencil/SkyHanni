@@ -1,39 +1,28 @@
 package at.hannibal2.skyhanni.features.inventory.attribute
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.config.ConfigManager
-import at.hannibal2.skyhanni.data.ProfileStorageData
-import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
-import at.hannibal2.skyhanni.test.command.ErrorManager
-import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ClipboardUtils
 import at.hannibal2.skyhanni.utils.DisplayTableEntry
-import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemPriceSource
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPrice
+import at.hannibal2.skyhanni.utils.ItemUtils.getCleanLore
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
-import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
 import at.hannibal2.skyhanni.utils.NumberUtil.formatInt
-import at.hannibal2.skyhanni.utils.OSUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
+import at.hannibal2.skyhanni.utils.SafeItemStack
+import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
-import at.hannibal2.skyhanni.utils.compat.InventoryCompat.orNull
+import at.hannibal2.skyhanni.utils.compat.mapToComponents
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.RenderableUtils
-import com.google.gson.annotations.Expose
-import com.google.gson.annotations.SerializedName
-import net.minecraft.world.inventory.Slot
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object HuntingBoxValue {
 
     private val config get() = AttributeShardsData.config
-    private val storage get() = ProfileStorageData.profileSpecific?.attributeShards
 
     private var display = emptyList<Renderable>()
 
@@ -41,7 +30,7 @@ object HuntingBoxValue {
     private var totalInstantSell = 0L
     private var totalInstantBuy = 0L
 
-    fun processInventory(slots: List<Slot>) {
+    fun processInventory(items: Map<Int, SafeItemStack>) {
         if (!config.huntingBoxValue) return
 
         totalShards = 0
@@ -50,10 +39,8 @@ object HuntingBoxValue {
 
         val table = mutableListOf<DisplayTableEntry>()
 
-        for (slot in slots) {
-            val slotNumber = slot.index
+        for ((slotNumber, stack) in items) {
             if (!isValidSlotNumber(slotNumber)) continue
-            val stack = slot.item.orNull() ?: continue
             processAttributeShardSlot(slotNumber, stack, table)
         }
 
@@ -63,67 +50,27 @@ object HuntingBoxValue {
             if (table.isNotEmpty()) {
                 add(RenderableUtils.fillScrollTable(table, padding = 5, itemScale = 0.7, height = 225, velocity = 5.0))
             } else {
-                possiblyAddWarning()
+                possiblyAddWarning(items)
             }
 
             addString("§7Total Attribute Shards: §a$totalShards")
             addString("§7Total Instant Sell Value: §6${totalInstantSell.addSeparators()}")
             addString("§7Total Instant Buy Value: §6${totalInstantBuy.addSeparators()}")
-            addExportToSkyShardsButton()
         }
     }
 
-    private fun MutableList<Renderable>.possiblyAddWarning() {
-        InventoryUtils.getItemAtSlotIndex(10).orNull() ?: return
+    private fun MutableList<Renderable>.possiblyAddWarning(items: Map<Int, SafeItemStack>) {
+        if (!items.containsKey(10)) return
 
         addString("§cError detected!")
         addString("§cPlease run §e/shdebug repo§c to get debug information.")
         addString("§cThen send the data on discord.")
-        addExportToSkyShardsButton()
     }
 
-    private fun MutableList<Renderable>.addExportToSkyShardsButton() {
-        if (!config.exportToSkyShards) return
-
-        val clickable = Renderable.clickable(
-            "§eExport to and open SkyShards",
-            tips = listOf(
-                "§7Click to copy your shard data to your clipboard,",
-                "§7Then opens SkyShards in your browser.",
-            ),
-            onLeftClick = {
-                exportToSkyShards()
-            },
-        )
-        add(clickable)
-    }
-
-    private data class SkyShardsAttributeData(
-        @Expose @SerializedName("hunting_box") val huntingBox: Map<String, Int>,
-        @Expose @SerializedName("attribute_menu") val attributeMenu: Map<String, Int>,
-    )
-
-    private fun Map<String, Int>.toShardIds(): Map<String, Int> {
-        return this.mapKeys { (key, _) ->
-            AttributeShardsData.shardNameToAttributeInformation(key)?.shardId
-                ?: ErrorManager.skyHanniError("Could not find shard ID for attribute shard with internal name $key")
-        }
-    }
-
-    private fun exportToSkyShards() {
-        val huntingBoxShards = storage?.map { it.key to it.value.amountInBox }?.toMap()?.filter { it.value > 0 }.orEmpty()
-        val attributeMenuShards = storage?.map { it.key to it.value.amountSyphoned }?.toMap()?.filter { it.value > 0 }.orEmpty()
-        val data = SkyShardsAttributeData(huntingBoxShards.toShardIds(), attributeMenuShards.toShardIds())
-        val json = ConfigManager.gson.toJson(data)
-        ClipboardUtils.copyToClipboard(json)
-        OSUtils.openBrowser("https://skyshards.com/smart")
-        ChatUtils.chat("§aCopied your attribute shard data to your clipboard and opened §dSkyShards§a.")
-    }
-
-    private fun processAttributeShardSlot(slotNumber: Int, stack: ItemStack, table: MutableList<DisplayTableEntry>) {
+    private fun processAttributeShardSlot(slotNumber: Int, stack: SafeItemStack, table: MutableList<DisplayTableEntry>) {
         val internalName = stack.getInternalNameOrNull() ?: return
 
-        val amountOwned = AttributeShardsData.amountOwnedPattern.firstMatcher(stack.getLore()) {
+        val amountOwned = AttributeShardsData.amountOwnedPattern.firstMatcher(stack.getCleanLore()) {
             group("amount").formatInt()
         } ?: return
         totalShards += amountOwned
@@ -149,24 +96,24 @@ object HuntingBoxValue {
 
         table.add(
             DisplayTableEntry(
-                "${internalName.repoItemName} §8x$amountOwned",
-                "§6${totalPriceInstantSell.addSeparators()}",
+                "${internalName.repoItemName} §8x$amountOwned".asComponent(),
+                "§6${totalPriceInstantSell.addSeparators()}".asComponent(),
                 totalPriceInstantSell,
                 internalName,
-                hover,
+                hover.mapToComponents(),
                 highlightsOnHoverSlots = listOf(slotNumber),
             ),
         )
     }
 
     private fun isValidSlotNumber(slot: Int): Boolean {
-        if (slot < 9 || slot > 44) return false
+        if (slot !in 9..44) return false
         val modNine = slot % 9
         return modNine != 0 && modNine != 8
     }
 
-    @HandleEvent(GuiRenderEvent.ChestGuiOverlayRenderEvent::class, onlyOnSkyblock = true)
-    fun onRenderOverlay() {
+    @HandleEvent(onlyOnSkyblock = true)
+    private fun onChestGuiRender() {
         if (!config.huntingBoxValue) return
         if (!AttributeShardsData.huntingBoxInventory.isInside()) return
 

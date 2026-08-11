@@ -1,6 +1,10 @@
 package at.hannibal2.skyhanni.config.features.misc
 
+import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.FeatureToggle
+import at.hannibal2.skyhanni.features.misc.discordrpc.AutoStatus
+import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList
@@ -47,12 +51,12 @@ class DiscordRPCConfig {
         PriorityEntry.AFK,
     )
 
-    enum class PriorityEntry(private val displayName: String) {
-        CROP_MILESTONES("Crop Milestones"),
-        SLAYER("Slayer"),
-        STACKING_ENCHANT("Stacking Enchantment"),
-        DUNGEONS("Dungeon"),
-        AFK("AFK Indicator"),
+    enum class PriorityEntry(private val displayName: String, val associatedAutoStatus: AutoStatus) {
+        CROP_MILESTONES("Crop Milestones", AutoStatus.CROP_MILESTONES),
+        SLAYER("Slayer", AutoStatus.SLAYER),
+        STACKING_ENCHANT("Stacking Enchantment", AutoStatus.STACKING),
+        DUNGEONS("Dungeon", AutoStatus.DUNGEONS),
+        AFK("AFK Indicator", AutoStatus.AFK),
         ;
 
         override fun toString() = displayName
@@ -72,9 +76,9 @@ class DiscordRPCConfig {
     val showSkyCryptButton: Property<Boolean> = Property.of(true)
 
     @Expose
-    @ConfigOption(name = "Show Button for EliteBot", desc = "Add a button to the RPC that opens your EliteBot profile.")
+    @ConfigOption(name = "Show Button for EliteSkyBlock", desc = "Add a button to the RPC that opens your EliteSkyBlock profile.")
     @ConfigEditorBoolean
-    val showEliteBotButton: Property<Boolean> = Property.of(true)
+    val showEliteSkyBlockButton: Property<Boolean> = Property.of(true)
 
     enum class LineEntry(private val displayName: String) {
         NOTHING("Nothing"),
@@ -96,11 +100,18 @@ class DiscordRPCConfig {
     }
 
     @ConfigOption(
-        name = "Credits",
-        desc = "Rich presence assets were created by\n" +
-            "Hypixel Pack HQ (packshq.com) for the old images\n" +
-            "and @unfamiliartunes (unfamiliartunes.straw.page) for the new images",
+        name = "Image Credits",
+        desc = "Hypixel Pack HQ (old images), @unfamiliartunes (Winter Island),\n" +
+            "@next_g (Crystal Nucleus)",
     )
     @ConfigEditorInfoText
     val credits = ""
+
+    @SkyHanniModule
+    companion object {
+        @HandleEvent
+        fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
+            event.move(128, "gui.discordRPC.showEliteBotButton", "gui.discordRPC.showEliteSkyBlockButton")
+        }
+    }
 }

@@ -26,7 +26,6 @@ import at.hannibal2.skyhanni.utils.NumberUtil.shortFormat
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.add
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addAll
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
@@ -123,13 +122,13 @@ object GardenVisitorDropStatistics {
         gemstonePowderPattern to { storage, amount -> storage.gemstonePowder += amount },
     )
 
-    @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onVisitorAccepted(event: VisitorAcceptedEvent) {
+    @HandleEvent(VisitorAcceptedEvent::class, onlyOnIsland = IslandType.GARDEN)
+    fun onVisitorAccepted() {
         lastAccept = SimpleTimeMark.now()
     }
 
-    @HandleEvent
-    fun onProfileJoin(event: ProfileJoinEvent) {
+    @HandleEvent(ProfileJoinEvent::class)
+    fun onProfileJoin() {
         display = emptyList()
     }
 
@@ -147,12 +146,12 @@ object GardenVisitorDropStatistics {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!GardenApi.onBarnPlot) return
         if (!ProfileStorageData.loaded) return
         if (lastAccept.passedSince() > 1.seconds) return
 
-        val message = event.message.removeColor().trim()
+        val message = event.cleanMessage.trim()
         val storage = GardenApi.storage?.visitorDrops ?: return
 
         patternStorageAccessorMap.forEach { (pattern, accessor) ->
@@ -187,6 +186,7 @@ object GardenVisitorDropStatistics {
                             addString(countFormat)
                         }
                     }
+
                     false -> list.addString(format(count, reward.displayName, "§b"))
                 }
             }
@@ -276,21 +276,21 @@ object GardenVisitorDropStatistics {
         )
     }
 
-    @HandleEvent
-    fun onConfigLoad(event: ConfigLoadEvent) {
+    @HandleEvent(ConfigLoadEvent::class)
+    fun onConfigLoad() {
         saveAndUpdate()
         ConditionalUtils.onToggle(
             config.enabled,
             config.textFormat,
             config.displayNumbersFirst,
-            config.displayIcons
+            config.displayIcons,
         ) {
             saveAndUpdate()
         }
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!config.enabled.get()) return
         if (GardenApi.hideExtraGuis()) return
         if (config.onlyOnBarn.get() && !GardenApi.onBarnPlot) return
@@ -341,10 +341,10 @@ object GardenVisitorDropStatistics {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shresetvisitordrops") {
+        event.registerBrigadier("shresetvisitordrops") {
             description = "Resets the Visitors Drop Statistics"
             category = CommandCategory.USERS_RESET
-            callback { resetCommand() }
+            simpleCallback { resetCommand() }
         }
     }
 }

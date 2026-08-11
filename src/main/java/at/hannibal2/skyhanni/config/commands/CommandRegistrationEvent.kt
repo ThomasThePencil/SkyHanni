@@ -8,9 +8,10 @@ import at.hannibal2.skyhanni.config.commands.brigadier.CommandData
 import at.hannibal2.skyhanni.utils.CommandArgument
 import at.hannibal2.skyhanni.utils.CommandContextAwareObject
 import com.mojang.brigadier.CommandDispatcher
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 
 class CommandRegistrationEvent(
-    val dispatcher: CommandDispatcher<Any?>,
+    val dispatcher: CommandDispatcher<FabricClientCommandSource>,
 ) : SkyHanniEvent() {
     private val builders = mutableListOf<CommandData>()
 
@@ -18,14 +19,6 @@ class CommandRegistrationEvent(
 
     fun registerBrigadier(name: String, builder: BaseBrigadierBuilder.() -> Unit) {
         val command = BaseBrigadierBuilder(name).apply(builder)
-        command.hasUniqueName(builders)
-        command.checkDescriptionAndCategory()
-        command.addToRegister(dispatcher, builders)
-    }
-
-    // TODO: Use Brigadier as backend and eventually deprecate it
-    fun register(name: String, block: CommandBuilder.() -> Unit) {
-        val command = CommandBuilder(name).apply(block)
         command.hasUniqueName(builders)
         command.checkDescriptionAndCategory()
         command.addToRegister(dispatcher, builders)

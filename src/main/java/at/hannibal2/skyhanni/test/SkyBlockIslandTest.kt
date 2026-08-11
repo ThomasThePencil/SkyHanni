@@ -1,11 +1,15 @@
 package at.hannibal2.skyhanni.test
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.api.event.SkyHanniEvents
+import at.hannibal2.skyhanni.api.event.SkyHanniEvents.DirtyReason
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
-import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierArguments
+import at.hannibal2.skyhanni.config.commands.brigadier.arguments.EnumArgumentType
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
+import at.hannibal2.skyhanni.events.mining.GlaciteMineshaftDetectEvent
+import at.hannibal2.skyhanni.features.mining.glacitemineshaft.MineshaftDetection
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 
@@ -13,9 +17,13 @@ import at.hannibal2.skyhanni.utils.ChatUtils
 object SkyBlockIslandTest {
 
     var testIsland: IslandType? = null
+        set(value) {
+            field = value
+            SkyHanniEvents.markEventCacheDirty(DirtyReason.LOCATION_CHANGED)
+        }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Island Test")
         testIsland?.let {
             event.addData {
@@ -33,40 +41,35 @@ object SkyBlockIslandTest {
             description = "Changes the SkyBlock island SkyHanni thinks you are on"
             category = CommandCategory.DEVELOPER_TEST
 
-            literal("reset") {
-                callback {
-                    testIsland?.let {
-                        ChatUtils.chat("Disabled test island (was ${it.displayName})")
-                        testIsland = null
-                        return@callback
+            literalCallback("reset") {
+                testIsland?.let {
+                    ChatUtils.chat("Disabled test island (was ${it.displayName})")
+                    testIsland = null
+                    return@literalCallback
+                }
+                ChatUtils.chat("Test island was not set.")
+            }
+
+            literal("mineshaft") {
+                MineshaftDetection.MineshaftType.entries.forEach { mineshaftType ->
+                    literalCallback(mineshaftType.name.lowercase()) {
+                        testIsland = IslandType.MINESHAFT
+                        ChatUtils.chat("Set test island to ${IslandType.MINESHAFT.displayName}")
+                        GlaciteMineshaftDetectEvent(mineshaftType).post()
                     }
-                    ChatUtils.chat("Test island was not set.")
+                }
+                callback {
+                    testIsland = IslandType.MINESHAFT
+                    ChatUtils.chat("Set test island to ${IslandType.MINESHAFT.displayName}")
+                    GlaciteMineshaftDetectEvent(MineshaftDetection.MineshaftType.TOPA_1).post()
                 }
             }
 
-            arg("island", BrigadierArguments.greedyString()) {
-                callback {
-                    val search = getArg(it).lowercase()
-                    val found = find(search)
-                    if (found == null) {
-                        ChatUtils.userError("Unknown island type! ($search)")
-                        return@callback
-                    }
-                    testIsland = found
-                    ChatUtils.chat("Set test island to ${found.displayName}")
-
-                }
+            argCallback("island", EnumArgumentType.lowercase<IslandType>(isGreedy = true)) { islandType ->
+                testIsland = islandType
+                ChatUtils.chat("Set test island to ${islandType.displayName}")
             }
-            callback { ChatUtils.userError("Usage: /shtestisland <island name>/reset") }
+            simpleCallback { ChatUtils.userError("Usage: /shtestisland <island name>/reset") }
         }
-    }
-
-    private fun find(search: String): IslandType? {
-        for (type in IslandType.entries) {
-            if (type.name.equals(search, ignoreCase = true)) return type
-            if (type.displayName.equals(search, ignoreCase = true)) return type
-        }
-
-        return null
     }
 }

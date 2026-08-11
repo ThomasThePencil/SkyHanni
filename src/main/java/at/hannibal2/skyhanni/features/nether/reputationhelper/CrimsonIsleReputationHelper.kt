@@ -4,15 +4,15 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.features.crimsonisle.ReputationHelperConfig.ShowLocationEntry
+import at.hannibal2.skyhanni.data.CrimsonIsleReputationApi
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.jsonobjects.repo.CrimsonIsleReputationJson
-import at.hannibal2.skyhanni.data.model.TabWidget
 import at.hannibal2.skyhanni.events.ConfigLoadEvent
 import at.hannibal2.skyhanni.events.GuiRenderEvent
+import at.hannibal2.skyhanni.events.ProfileDataReadyEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.events.SackChangeEvent
-import at.hannibal2.skyhanni.events.WidgetUpdateEvent
 import at.hannibal2.skyhanni.features.nether.reputationhelper.dailyquest.DailyQuestHelper
 import at.hannibal2.skyhanni.features.nether.reputationhelper.dailyquest.QuestLoader
 import at.hannibal2.skyhanni.features.nether.reputationhelper.kuudra.DailyKuudraBossHelper
@@ -24,9 +24,9 @@ import at.hannibal2.skyhanni.utils.KeyboardManager.isKeyHeld
 import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.InventoryScreen
 
 @SkyHanniModule
@@ -34,30 +34,25 @@ object CrimsonIsleReputationHelper {
 
     private val config get() = SkyHanniMod.feature.crimsonIsle.reputationHelper
 
-    var factionType get() = ProfileStorageData.profileSpecific?.crimsonIsleFaction
-        set(it) {
-            ProfileStorageData.profileSpecific?.crimsonIsleFaction = it
-        }
-
     private var display = emptyList<Renderable>()
     private var dirty = true
     var tabListQuestsMissing = false
 
     /**
-     * REGEX-TEST:  §r§c✖ Rescue Mission
-     * REGEX-TEST:  §r§a✔ Digested Mushrooms §r§8x20
-     * REGEX-TEST:  §r§c✖ Slugfish §r§8x1
+     * WRAPPED-REGEX-TEST: " ✖ Rescue Mission"
+     * WRAPPED-REGEX-TEST: " ✔ Digested Mushrooms x20"
+     * WRAPPED-REGEX-TEST: " ✖ Slugfish x1"
      */
     val tabListQuestPattern by RepoPattern.pattern(
-        "crimson.reputationhelper.tablist.quest",
-        " (?:§.*)?(?<status>[✖✔]) (?<name>.+?)(?: (?:§.)*?x(?<amount>\\d+))?",
+        "crimson.reputationhelper.tablist.quest-no-color",
+        "\\s*(?<status>[✖✔]) (?<name>.+?)(?: x(?<amount>\\d+))?$",
     )
 
     @HandleEvent
     fun onRepoReload(event: RepositoryReloadEvent) {
         val data = event.getConstant<CrimsonIsleReputationJson>("CrimsonIsleReputation")
-        DailyMiniBossHelper.onRepoReload(data.MINIBOSS)
-        DailyKuudraBossHelper.onRepoReload(data.KUUDRA)
+        DailyMiniBossHelper.processRepoData(data.MINIBOSS)
+        DailyKuudraBossHelper.processRepoData(data.KUUDRA)
 
         QuestLoader.quests.clear()
         QuestLoader.loadQuests(data.FISHING, "FISHING")
@@ -69,13 +64,16 @@ object CrimsonIsleReputationHelper {
     }
 
     @HandleEvent
-    fun onConfigLoad(event: ConfigLoadEvent) {
+    fun onProfileDataReady(event: ProfileDataReadyEvent) {
         ProfileStorageData.profileSpecific?.crimsonIsle?.let {
             DailyMiniBossHelper.loadData(it)
             DailyKuudraBossHelper.loadData(it)
             DailyQuestHelper.load(it)
         }
+    }
 
+    @HandleEvent
+    fun onConfigLoad(event: ConfigLoadEvent) {
         config.hideComplete.afterChange {
             updateRender()
         }
@@ -84,15 +82,6 @@ object CrimsonIsleReputationHelper {
     @HandleEvent
     fun onSackChange(event: SackChangeEvent) {
         dirty = true
-    }
-
-    @HandleEvent
-    fun onWidgetUpdate(event: WidgetUpdateEvent) {
-        if (!event.isWidget(TabWidget.REPUTATION)) return
-
-        TabWidget.REPUTATION.matchMatcherFirstLine {
-            factionType = FactionType.fromName(group("faction"))
-        }
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CRIMSON_ISLE)
@@ -110,7 +99,7 @@ object CrimsonIsleReputationHelper {
     private fun updateRender() {
         display = buildList {
             addString("§e§lReputation Helper")
-            if (factionType == null) {
+            if (CrimsonIsleReputationApi.factionType == null) {
                 addString("§cFaction not found!")
                 return
             }
@@ -133,7 +122,7 @@ object CrimsonIsleReputationHelper {
     }
 
     @HandleEvent(priority = HandleEvent.LOWEST, onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!config.enabled.get()) return
 
         if (config.useHotkey && !isHotkeyHeld()) {
@@ -147,7 +136,7 @@ object CrimsonIsleReputationHelper {
     }
 
     fun isHotkeyHeld(): Boolean {
-        val isAllowedGui = Minecraft.getInstance().screen.let {
+        val isAllowedGui = MinecraftCompat.screen.let {
             it == null || it is InventoryScreen
         }
         if (!isAllowedGui) return false

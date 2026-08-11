@@ -18,6 +18,7 @@ import at.hannibal2.skyhanni.utils.RegexUtils.findMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeResets
@@ -25,9 +26,7 @@ import at.hannibal2.skyhanni.utils.StringUtils.trimWhiteSpace
 import at.hannibal2.skyhanni.utils.TimeUtils
 import at.hannibal2.skyhanni.utils.UtilsPatterns
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.nextAfter
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration.Companion.days
 
 @SkyHanniModule
@@ -134,7 +133,7 @@ object BitsApi {
     )
 
     /**
-     * REGEX-TEST:  §7Duration: §a140d 8h 35m 36s
+     * WRAPPED-REGEX-TEST: " §7Duration: §a140d 8h 35m 36s"
      */
     private val cookieDurationPattern by bitsGuiGroup.pattern(
         "cookieduration",
@@ -165,12 +164,12 @@ object BitsApi {
 
     private val cookieGuiStackPattern by bitsGuiGroup.pattern(
         "mainmenustack",
-        "^§6Booster Cookie$",
+        "^Booster Cookie$",
     )
 
     private val bitsStackPattern by bitsGuiGroup.pattern(
         "bitsstack",
-        "§bBits",
+        "Bits",
     )
 
     /**
@@ -183,30 +182,31 @@ object BitsApi {
     )
 
     /**
-     * REGEX-TEST: §aCommunity Shop
-     * REGEX-TEST: §eFame Rank
+     * REGEX-TEST: Community Shop
+     * REGEX-TEST: Fame Rank
      */
     private val fameRankGuiStackPattern by bitsGuiGroup.pattern(
         "famerankmenustack",
-        "^§aCommunity Shop|§eFame Rank$",
+        "^Community Shop|Fame Rank$",
     )
 
-    private val museumGuiNamePattern by bitsGuiGroup.pattern(
+    val museumGuiNamePattern by bitsGuiGroup.pattern(
         "museumguiname",
         "Your Museum",
     )
 
     private val museumRewardStackPattern by bitsGuiGroup.pattern(
         "museumrewardstack",
-        "§6Museum Rewards",
+        "Museum Rewards",
     )
 
     /**
      * REGEX-TEST: §7§7Milestone: §e11§6/§e30
+     * REGEX-TEST: §7§7Milestone: §e20§6/§e40
      */
     private val museumMilestonePattern by bitsGuiGroup.pattern(
         "museummilestone",
-        "(?:§.)*Milestone: §e(?<milestone>\\d+)§6/§e30",
+        "(?:§.)*Milestone: §e(?<milestone>\\d+)§6/§e\\d+",
     )
 
     @HandleEvent
@@ -239,7 +239,7 @@ object BitsApi {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
         val message = event.message.trimWhiteSpace().removeResets()
 
@@ -276,9 +276,11 @@ object BitsApi {
         }
     }
 
-    fun bitsPerCookie(): Int {
+    fun bitsPerCookie(): Int = (DEFAULT_COOKIE_BITS * bitsMultiplier()).toInt()
+
+    fun bitsMultiplier(): Double {
         val museumBonus = profileStorage?.museumMilestone?.let { 1 + it * 0.01 } ?: 1.0 // Adds 1% per level
-        return (DEFAULT_COOKIE_BITS * museumBonus * (fameRank?.bitsMultiplier ?: 1.0)).toInt()
+        return museumBonus * (fameRank?.bitsMultiplier ?: 1.0)
     }
 
     @HandleEvent
@@ -288,14 +290,14 @@ object BitsApi {
         val stacks = event.inventoryItems.values
 
         when {
-            UtilsPatterns.skyblockMenuGuiPattern.matches(event.inventoryName) -> handleSkyBlockMenu(stacks)
+            UtilsPatterns.skyblockMenuInventory.isInside() -> handleSkyBlockMenu(stacks)
             fameRankGuiNamePattern.matches(event.inventoryName) -> handleFameRankGui(stacks)
             museumGuiNamePattern.matches(event.inventoryName) -> handleMuseumGui(stacks)
         }
     }
 
-    private fun handleSkyBlockMenu(stacks: Collection<ItemStack>) {
-        val cookieStack = stacks.lastOrNull { cookieGuiStackPattern.matches(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) }
+    private fun handleSkyBlockMenu(stacks: Collection<SafeItemStack>) {
+        val cookieStack = stacks.lastOrNull { cookieGuiStackPattern.matches(it.hoverName) }
 
         // If the cookie stack is null, then the player should not have any bits to claim
         if (cookieStack == null) {
@@ -311,7 +313,7 @@ object BitsApi {
                 bitsAvailable = amount
                 sendBitsAvailableGainedEvent()
                 /**
-                 * We cant increase [BitsApi.bits] here since that difference is alr accounted for,
+                 * We can't increase [BitsApi.bits] here since that difference is alr accounted for,
                  * if we do, it will be counted twice
                  */
             }
@@ -326,14 +328,14 @@ object BitsApi {
         }
     }
 
-    private fun handleFameRankGui(stacks: Collection<ItemStack>) {
+    private fun handleFameRankGui(stacks: Collection<SafeItemStack>) {
         processFameRankStacks(stacks)
         processBitsStacks(stacks)
         processCookieStacks(stacks)
     }
 
-    private fun processFameRankStacks(stacks: Collection<ItemStack>) {
-        val stack = stacks.firstOrNull { fameRankGuiStackPattern.matches(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) } ?: return
+    private fun processFameRankStacks(stacks: Collection<SafeItemStack>) {
+        val stack = stacks.firstOrNull { fameRankGuiStackPattern.matches(it.hoverName) } ?: return
         fun fameRankOrNull(rank: String) {
             fameRank = FameRanks.getByName(rank) ?: run {
                 ErrorManager.logErrorWithData(
@@ -361,8 +363,8 @@ object BitsApi {
         }
     }
 
-    private fun processBitsStacks(stacks: Collection<ItemStack>) {
-        val stack = stacks.firstOrNull { bitsStackPattern.matches(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) } ?: return
+    private fun processBitsStacks(stacks: Collection<SafeItemStack>) {
+        val stack = stacks.firstOrNull { bitsStackPattern.matches(it.hoverName) } ?: return
         var foundAvailable = false
         var foundBits = false
         for (line in stack.getLore()) {
@@ -385,8 +387,8 @@ object BitsApi {
         }
     }
 
-    private fun processCookieStacks(stacks: Collection<ItemStack>) {
-        val stack = stacks.firstOrNull { cookieGuiStackPattern.matches(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) } ?: return
+    private fun processCookieStacks(stacks: Collection<SafeItemStack>) {
+        val stack = stacks.firstOrNull { cookieGuiStackPattern.matches(it.hoverName) } ?: return
         for (line in stack.getLore()) {
             cookieDurationPattern.matchMatcher(line) {
                 val duration = TimeUtils.getDuration(group("time"))
@@ -402,8 +404,8 @@ object BitsApi {
         }
     }
 
-    private fun handleMuseumGui(stacks: Collection<ItemStack>) {
-        val stack = stacks.firstOrNull { museumRewardStackPattern.matches(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) } ?: return
+    private fun handleMuseumGui(stacks: Collection<SafeItemStack>) {
+        val stack = stacks.firstOrNull { museumRewardStackPattern.matches(it.hoverName) } ?: return
 
         museumMilestonePattern.firstMatcher(stack.getLore()) {
             profileStorage?.museumMilestone = group("milestone").formatInt()
@@ -421,7 +423,7 @@ object BitsApi {
     fun isEnabled() = SkyBlockUtils.inSkyBlock && !SkyBlockUtils.isOnAlphaServer && profileStorage != null
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Bits API")
         event.addIrrelevant {
             add("Bits: $bits")

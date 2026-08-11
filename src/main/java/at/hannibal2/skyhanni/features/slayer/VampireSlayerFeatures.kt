@@ -2,12 +2,12 @@ package at.hannibal2.skyhanni.features.slayer
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
-import at.hannibal2.skyhanni.data.ClickType
+import at.hannibal2.skyhanni.data.InteractClickType
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.SlayerApi
 import at.hannibal2.skyhanni.data.title.TitleManager
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.PlaySoundEvent
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.entity.EntityClickEvent
 import at.hannibal2.skyhanni.events.entity.EntityDeathEvent
@@ -25,22 +25,24 @@ import at.hannibal2.skyhanni.utils.EntityUtils
 import at.hannibal2.skyhanni.utils.EntityUtils.baseMaxHealth
 import at.hannibal2.skyhanni.utils.EntityUtils.canBeSeen
 import at.hannibal2.skyhanni.utils.EntityUtils.getAllNameTagsInRadiusWith
+import at.hannibal2.skyhanni.utils.EntityUtils.getEntitiesNearby
 import at.hannibal2.skyhanni.utils.EntityUtils.hasSkullTexture
 import at.hannibal2.skyhanni.utils.EntityUtils.isNpc
 import at.hannibal2.skyhanni.utils.LocationUtils
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzColor
+import at.hannibal2.skyhanni.utils.PlayerUtils.SNEAKING_EYE_HEIGHT
 import at.hannibal2.skyhanni.utils.ServerTimeMark
 import at.hannibal2.skyhanni.utils.SkullTextureHolder
 import at.hannibal2.skyhanni.utils.TimeUtils.ticks
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.editCopy
-import at.hannibal2.skyhanni.utils.compat.deceased
-import at.hannibal2.skyhanni.utils.compat.findHealthReal
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.deceased
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.findHealthReal
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLessResets
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.draw3DLine
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawColor
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawDynamicText
-import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawLineToEye
+import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawLineToCrosshair
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawWaypointFilled
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.exactLocation
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.exactPlayerEyeLocation
@@ -71,10 +73,11 @@ object VampireSlayerFeatures {
 
     // Nicked support
     private val username
-        get() = EntityUtils.getEntities<LocalPlayer>().firstOrNull()?.name.formattedTextCompatLessResets() ?: error("own player is null")
+        get() = EntityUtils.getEntities<LocalPlayer>().firstOrNull()?.name?.formattedTextCompatLessResets()
+            ?: error("own player is null")
 
-    private val BLOOD_ICHOR_TEXTURE by lazy { SkullTextureHolder.getTexture("BLOOD_ICHOR") }
-    private val KILLER_SPRING_TEXTURE by lazy { SkullTextureHolder.getTexture("KILLER_SPRING") }
+    private val BLOOD_ICHOR_TEXTURE by SkullTextureHolder.texture("BLOOD_ICHOR")
+    private val KILLER_SPRING_TEXTURE by SkullTextureHolder.texture("KILLER_SPRING")
 
     private var nextClawSend = 0L
     private var lastWitherSpawnSound = ServerTimeMark.farPast()
@@ -124,38 +127,43 @@ object VampireSlayerFeatures {
         contain
     }
 
-    private fun RemotePlayer.process() {
-        if (name.formattedTextCompatLessResets() != "Bloodfiend ") return
+    private fun RemotePlayer.processTwinClawsTitle() {
+        val configEnabled = configOwnBoss.twinClawsTitle || configOtherBoss.twinClawsTitle || configCoopBoss.twinClawsTitle
+        if (!configEnabled) return
 
-        if (configOwnBoss.twinClawsTitle || configOtherBoss.twinClawsTitle || configCoopBoss.twinClawsTitle) {
-            for (stand in getAllNameTagsInRadiusWith("TWINCLAWS")) {
-                if (!".*(?:§(?:\\d|\\w))+TWINCLAWS (?:§(?:\\w|\\d))+[0-9.,]+s.*".toRegex()
-                        .matches(stand.name.formattedTextCompatLessResets())
-                ) continue
-                val coopList = configCoopBoss.coopMembers.split(",").toList()
-                val containUser = getAllNameTagsInRadiusWith("Spawned by").any {
-                    it.name.formattedTextCompatLessResets().contains(username)
-                }
-                val containCoop = getAllNameTagsInRadiusWith("Spawned by").any {
-                    configCoopBoss.highlight && coopList.spawnedByCoop(it)
-                }
-                val shouldSendTitle =
-                    if (containUser && configOwnBoss.twinClawsTitle) true
-                    else if (containCoop && configCoopBoss.twinClawsTitle) true
-                    else taggedEntityList.contains(this.id) && configOtherBoss.twinClawsTitle
+        for (stand in getAllNameTagsInRadiusWith("TWINCLAWS")) {
+            if (!".*(?:§(?:\\d|\\w))+TWINCLAWS (?:§(?:\\w|\\d))+[0-9.,]+s.*".toRegex()
+                    .matches(stand.name.formattedTextCompatLessResets())
+            ) continue
+            val coopList = configCoopBoss.coopMembers.split(",").toList()
+            val containUser = getAllNameTagsInRadiusWith("Spawned by").any {
+                it.name.formattedTextCompatLessResets().contains(username)
+            }
+            val containCoop = getAllNameTagsInRadiusWith("Spawned by").any {
+                configCoopBoss.highlight && coopList.spawnedByCoop(it)
+            }
+            val shouldSendTitle =
+                if (containUser && configOwnBoss.twinClawsTitle) true
+                else if (containCoop && configCoopBoss.twinClawsTitle) true
+                else taggedEntityList.contains(this.id) && configOtherBoss.twinClawsTitle
 
-                if (!shouldSendTitle) continue
-                DelayedRun.runDelayed(config.twinclawsDelay.milliseconds) {
-                    if (nextClawSend < System.currentTimeMillis()) {
-                        TitleManager.sendTitle(
-                            "§6§lTWINCLAWS",
-                            duration = (1750 - config.twinclawsDelay).milliseconds,
-                        )
-                        nextClawSend = System.currentTimeMillis() + 5_000
-                    }
+            if (!shouldSendTitle) continue
+            DelayedRun.runDelayed(config.twinclawsDelay.milliseconds) {
+                if (nextClawSend < System.currentTimeMillis()) {
+                    TitleManager.sendTitle(
+                        "§6§lTWINCLAWS",
+                        duration = (1750 - config.twinclawsDelay).milliseconds,
+                    )
+                    nextClawSend = System.currentTimeMillis() + 5_000
                 }
             }
         }
+    }
+
+    private fun RemotePlayer.process() {
+        if (name.formattedTextCompatLessResets() != "Bloodfiend ") return
+
+        processTwinClawsTitle()
         for (it in getAllNameTagsInRadiusWith("Spawned by")) {
             val coopList = configCoopBoss.coopMembers.split(",").toList()
             val containUser = it.name.formattedTextCompatLessResets().contains(username)
@@ -188,7 +196,7 @@ object VampireSlayerFeatures {
             }
 
             if (shouldRender) {
-                RenderLivingEntityHelper.setEntityColorWithNoHurtTime(this, color) { isEnabled() }
+                RenderLivingEntityHelper.setEntityColor(this, color) { isEnabled() }
                 entityList.add(this)
             }
         }
@@ -201,7 +209,7 @@ object VampireSlayerFeatures {
     @HandleEvent(onlyOnIsland = IslandType.THE_RIFT)
     fun onEntityClick(event: EntityClickEvent) {
         if (!isEnabled()) return
-        if (event.clickType != ClickType.LEFT_CLICK) return
+        if (event.clickType != InteractClickType.LEFT_CLICK) return
         if (event.clickedEntity !is RemotePlayer) return
         if (!event.clickedEntity.isNpc()) return
         val coopList = configCoopBoss.coopMembers.split(",").toList()
@@ -245,8 +253,8 @@ object VampireSlayerFeatures {
                 if (!it.isHighlighted()) continue
                 if (!it.canBeSeen(15)) continue
                 val vec = event.exactLocation(it)
-                event.drawLineToEye(
-                    vec.up(1.54),
+                event.drawLineToCrosshair(
+                    vec.up(SNEAKING_EYE_HEIGHT),
                     config.lineColor,
                     config.lineWidth,
                     true,
@@ -313,13 +321,13 @@ object VampireSlayerFeatures {
         standList = mutableMapOf()
     }
 
-    @HandleEvent(onlyOnIsland = IslandType.THE_RIFT)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
+    @HandleEvent(onlyOnIsland = IslandType.THE_RIFT, receiveCancelled = true)
+    fun onParticle(event: ParticleEvent) {
         if (!isEnabled()) return
         val loc = event.location
-        for (boss in EntityUtils.getEntitiesNearby<RemotePlayer>(loc, 3.0)) {
+        for (boss in loc.getEntitiesNearby<RemotePlayer>(3.0)) {
             if (!boss.isHighlighted() || event.type != ParticleTypes.ENCHANT) continue
-            for (ichor in EntityUtils.getEntitiesNearby<ArmorStand>(event.location, 3.0)) {
+            for (ichor in event.location.getEntitiesNearby<ArmorStand>(3.0)) {
                 if (ichor.hasSkullTexture(KILLER_SPRING_TEXTURE) || ichor.hasSkullTexture(BLOOD_ICHOR_TEXTURE)) {
                     standList = standList.editCopy { this[ichor] = boss }
                 }
@@ -332,7 +340,7 @@ object VampireSlayerFeatures {
         if (!isEnabled()) return
         if (!configKillerSpring.fixSoundSpam) return
 
-        if (event.soundName == "mob.wither.spawn") {
+        if (event.soundName == "entity.wither.spawn") {
             if (lastWitherSpawnSound.passedSince() < 1.ticks) {
                 ChatUtils.debug("Cancelling duplicate wither spawn sound sent within the same tick")
                 return event.cancel()

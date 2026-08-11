@@ -4,6 +4,7 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.features.fishing.trophyfishing.ChatMessagesConfig.DesignFormat
+import at.hannibal2.skyhanni.data.model.SkyblockStat
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.fishing.TrophyFishCaughtEvent
@@ -17,7 +18,6 @@ import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.sumAllValues
-import at.hannibal2.skyhanni.utils.compat.appendComponent
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 
 @SkyHanniModule
@@ -25,23 +25,22 @@ object TrophyFishMessages {
     private val config get() = SkyHanniMod.feature.fishing.trophyFishing.chatMessages
 
     /**
-     * REGEX-TEST: §6♔ §r§6§lTROPHY FISH! §r§fYou caught a §r§9Lavahorse §r§6§lGOLD§r§f!
-     * REGEX-TEST: §6♔ §r§6§lTROPHY FISH! §r§fYou caught a §r§5Soul Fish §r§8§lBRONZE§r§f!
-     * REGEX-TEST: §6♔ §r§6§lTROPHY FISH! §r§fYou caught a §r§9Mana Ray §r§8§lBRONZE§r§f!
-     * REGEX-TEST: §6♔ §r§6§lTROPHY FISH! §r§fYou caught a §r§fBlobfish §r§7§lSILVER§r§f!
-     * REGEX-TEST: §6♔ §r§6§lTROPHY FISH! §r§fYou caught a §r§6Golden Fish §r§7§lSILVER§r§f!
+     * REGEX-TEST: §6 §r§6§lTROPHY FISH! §r§fYou caught a §r§9Lavahorse §r§6§lGOLD§r§f!
+     * REGEX-TEST: §6 §r§6§lTROPHY FISH! §r§fYou caught a §r§5Soul Fish §r§8§lBRONZE§r§f!
+     * REGEX-TEST: §6 §r§6§lTROPHY FISH! §r§fYou caught a §r§9Mana Ray §r§8§lBRONZE§r§f!
+     * REGEX-TEST: §6 §r§6§lTROPHY FISH! §r§fYou caught a §r§fBlobfish §r§7§lSILVER§r§f!
+     * REGEX-TEST: §6 §r§6§lTROPHY FISH! §r§fYou caught a §r§6Golden Fish §r§7§lSILVER§r§f!
      */
     @Suppress("MaxLineLength")
     val trophyFishPattern by RepoPattern.pattern(
         "fishing.trophy.trophyfish",
-        "§6♔ §r§6§lTROPHY FISH! §r§fYou caught an? §r(?<displayName>§[0-9a-f](?:§k)?[\\w -]+) §r(?<displayRarity>§[0-9a-f]§l\\w+)§r§f!",
+        "§6\uE02A §r§6§lTROPHY FISH! §r§fYou caught an? §r(?<displayName>§[0-9a-f](?:§k)?[\\w -]+) §r(?<displayRarity>§[0-9a-f]§l\\w+)§r§f!",
     )
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         val (displayName, displayRarity) = trophyFishPattern.matchMatcher(event.message) {
-            group("displayName").replace("§k", "") to
-                group("displayRarity")
+            group("displayName").replace("§k", "") to group("displayRarity")
         } ?: return
 
         val internalName = TrophyFishApi.getInternalName(displayName)
@@ -56,6 +55,24 @@ object TrophyFishMessages {
             event.blockedReason = "low_trophy_fish"
             return
         }
+
+        if (config.duplicateHider) event.chatLineId = (internalName + rarity).hashCode()
+    }
+
+    @HandleEvent(onlyOnSkyblock = true)
+    fun onChat(event: SkyHanniChatEvent.Modify) {
+        val (displayName, displayRarity) = trophyFishPattern.matchMatcher(event.message) {
+            group("displayName").replace("§k", "") to
+                group("displayRarity")
+        } ?: return
+
+        val internalName = TrophyFishApi.getInternalName(displayName)
+        val rarity = TrophyRarity.getByName(displayRarity.lowercase().removeColor()) ?: return
+
+        val trophyFishes = TrophyFishManager.fish ?: return
+        val trophyFishCounts = trophyFishes.getOrPut(internalName) { mutableMapOf() }
+        val amount = trophyFishCounts[rarity] ?: 1
+
         if (config.goldAlert && rarity == TrophyRarity.GOLD) {
             sendTitle(displayName, displayRarity, amount)
             if (config.playSound) SoundUtils.playBeepSound()
@@ -74,12 +91,12 @@ object TrophyFishMessages {
                 DesignFormat.STYLE_2 -> "§bYou caught a $displayName $displayRarity§b. §7(${amount.addSeparators()})"
                 else -> "§bYou caught your ${amount.addSeparators()}${amount.ordinal()} $displayRarity $displayName§b."
             }
-            "§6♔ §6§lTROPHY FISH! $designFormat".asComponent()
+            "§6${SkyblockStat.TROPHY_FISH_CHANCE.icon} §6§lTROPHY FISH! $designFormat".asComponent()
         } else event.chatComponent.copy()
 
         if (config.totalAmount) {
             val total = trophyFishCounts.sumAllValues()
-            edited.appendComponent((" §7(${total.addSeparators()}${total.ordinal()} total)").asComponent())
+            edited.append((" §7(${total.addSeparators()}${total.ordinal()} total)"))
         }
 
         if (config.tooltip) {
@@ -88,7 +105,6 @@ object TrophyFishMessages {
             }
         }
 
-        if (config.duplicateHider) event.chatLineId = (internalName + rarity).hashCode()
         event.replaceComponent(edited, "TROPHY_FISH")
     }
 

@@ -9,6 +9,7 @@ import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
 import at.hannibal2.skyhanni.utils.ItemUtils.hasHypixelEnchantments
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
@@ -20,7 +21,9 @@ import at.hannibal2.skyhanni.utils.NumberUtil.formatPercentage
 import at.hannibal2.skyhanni.utils.NumberUtil.romanToDecimalIfNecessary
 import at.hannibal2.skyhanni.utils.PrimitiveIngredient.Companion.toPrimitiveItemStacks
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
+import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils.renderStrings
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
@@ -28,20 +31,31 @@ import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessRes
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object MinionCraftHelper {
 
     private val config get() = SkyHanniMod.feature.event.bingo
 
+    private val patternGroup = RepoPattern.group("bingo.minion")
+
     /**
      * REGEX-TEST: Sheep Minion X
      * REGEX-TEST: Wheat Minion IV
      */
-    private val minionNamePattern by RepoPattern.pattern(
-        "bingo.minion.name",
+    private val minionNamePattern by patternGroup.pattern(
+        "name",
         "(?<name>.*) Minion (?<number>.*)",
+    )
+
+    /**
+     * REGEX-TEST: (1/3) Crafted Minions
+     * REGEX-TEST: (2/3) Crafted Minions
+     * REGEX-TEST: (3/3) Crafted Minions
+     */
+    private val craftedMinionsInventoryPattern by patternGroup.pattern(
+        "inventory",
+        "(?:\\(\\d/\\d\\) )?Crafted Minions",
     )
 
     private var display = emptyList<String>()
@@ -65,7 +79,7 @@ object MinionCraftHelper {
         val mainInventory = InventoryUtils.getItemsInOwnInventory()
 
         if (event.isMod(10)) {
-            hasMinionInInventory = mainInventory.map { it.hoverName.formattedTextCompatLeadingWhiteLessResets() }.any { isMinionName(it) }
+            hasMinionInInventory = mainInventory.map { it.hoverName.string }.any { isMinionName(it) }
         }
 
         if (event.repeatSeconds(2)) {
@@ -100,7 +114,7 @@ object MinionCraftHelper {
     }
 
     private fun loadFromInventory(
-        mainInventory: List<ItemStack>,
+        mainInventory: List<SafeItemStack>,
     ): Pair<MutableMap<String, NeuInternalName>, MutableMap<NeuInternalName, Int>> {
         init()
 
@@ -108,7 +122,7 @@ object MinionCraftHelper {
         val otherItems = mutableMapOf<NeuInternalName, Int>()
 
         for (item in mainInventory) {
-            val name = item.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()
+            val name = item.cleanName
             val rawId = item.getInternalName()
             if (isMinionName(name)) {
                 minions[name] = rawId
@@ -119,7 +133,7 @@ object MinionCraftHelper {
         minions.values.mapTo(allMinions) { it.addOneToId() }
 
         for (item in mainInventory) {
-            val name = item.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()
+            val name = item.cleanName
             if (item.hasHypixelEnchantments()) continue
             val rawId = item.getInternalName()
             if (!isMinionName(name)) {
@@ -156,13 +170,13 @@ object MinionCraftHelper {
         return false
     }
 
+    // TODO add neu repo reload support
     private fun init() {
         if (tierOneMinions.isNotEmpty()) return
 
         allIngredients.clear()
 
-        for (internalId in NeuItems.allNeuRepoItems().keys) {
-            val internalName = internalId.toInternalName()
+        for (internalName in NeuItems.allNeuRepoInternalNames()) {
             if (internalName.endsWith("_GENERATOR_1")) {
                 if (internalName == "REVENANT_GENERATOR_1".toInternalName() ||
                     internalName == "TARANTULA_GENERATOR_1".toInternalName() ||
@@ -242,7 +256,7 @@ object MinionCraftHelper {
     }
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!SkyBlockUtils.isBingoProfile) return
         if (!config.minionCraftHelperEnabled) return
 
@@ -267,7 +281,7 @@ object MinionCraftHelper {
     @HandleEvent
     fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
         if (!SkyBlockUtils.isBingoProfile) return
-        if (event.inventoryName != "Crafted Minions") return
+        if (!craftedMinionsInventoryPattern.matches(event.inventoryName)) return
 
         for ((_, b) in event.inventoryItems) {
             val name = b.hoverName.formattedTextCompatLeadingWhiteLessResets()

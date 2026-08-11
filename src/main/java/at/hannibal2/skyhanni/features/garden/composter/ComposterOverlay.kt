@@ -6,20 +6,20 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
+import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierArguments
 import at.hannibal2.skyhanni.config.features.garden.composter.ComposterConfig.RetrieveFromEntry
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.SackApi.getAmountInSacksOrNull
+import at.hannibal2.skyhanni.data.SackApi.isMissingSackItem
+import at.hannibal2.skyhanni.data.garden.ComposterUpgradesData
 import at.hannibal2.skyhanni.data.jsonobjects.repo.GardenJson
 import at.hannibal2.skyhanni.data.model.ComposterUpgrade
-import at.hannibal2.skyhanni.events.ConfigLoadEvent
+import at.hannibal2.skyhanni.data.model.TabWidget
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
-import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
-import at.hannibal2.skyhanni.events.IslandChangeEvent
-import at.hannibal2.skyhanni.events.NeuRepositoryReloadEvent
+import at.hannibal2.skyhanni.events.IslandJoinEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
-import at.hannibal2.skyhanni.events.TabListUpdateEvent
-import at.hannibal2.skyhanni.events.minecraft.ToolTipEvent
+import at.hannibal2.skyhanni.events.WidgetUpdateEvent
+import at.hannibal2.skyhanni.events.minecraft.ToolTipTextEvent
 import at.hannibal2.skyhanni.features.garden.GardenApi
 import at.hannibal2.skyhanni.features.garden.composter.ComposterApi.getLevel
 import at.hannibal2.skyhanni.features.inventory.bazaar.BazaarApi
@@ -34,6 +34,7 @@ import at.hannibal2.skyhanni.utils.InventoryUtils.getAmountInInventory
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.formatCoin
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.formatCoinWithBrackets
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPrice
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemNameCompact
 import at.hannibal2.skyhanni.utils.KeyboardManager
@@ -58,7 +59,6 @@ import at.hannibal2.skyhanni.utils.collection.CollectionUtils.sortedDesc
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addItemStack
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addVerticalSpacer
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.RenderableUtils.addRenderableButton
 import at.hannibal2.skyhanni.utils.renderables.addLine
@@ -75,6 +75,7 @@ import kotlin.time.Duration.Companion.milliseconds
 @SkyHanniModule
 object ComposterOverlay {
 
+    private var displayDirty = false
     private var organicMatterFactors: Map<NeuInternalName, Double> = emptyMap()
     private var fuelFactors: Map<NeuInternalName, Double> = emptyMap()
     private var organicMatter: Map<NeuInternalName, Double> = emptyMap()
@@ -84,8 +85,8 @@ object ComposterOverlay {
     private var fuelExtraDisplay: Renderable? = null
 
     private var currentTimeType = TimeType.HOUR
-    private val composterInventory = InventoryDetector { name -> name == "Composter" }
-    private val composterUpgradesInventory = InventoryDetector { name -> name == "Composter Upgrades" }
+    private val composterInventory = InventoryDetector { ComposterUpgradesData.composterInventoryPattern }
+    private val composterUpgradesInventory = InventoryDetector { ComposterUpgradesData.composterUpgradesInventoryPattern }
     private var extraComposterUpgrade: ComposterUpgrade? = null
         set(value) {
             field = value
@@ -117,39 +118,36 @@ object ComposterOverlay {
     private val VOLTA = "VOLTA".toInternalName()
     private val OIL_BARREL = "OIL_BARREL".toInternalName()
 
-    @HandleEvent(TabListUpdateEvent::class, priority = HandleEvent.LOW)
-    fun onTabListUpdate() {
-        if (inInventory) {
-            update()
-        }
+    @HandleEvent(onlyOnIsland = IslandType.GARDEN)
+    fun onWidgetUpdate(event: WidgetUpdateEvent) {
+        if (!isEnabled() || !event.isWidget(TabWidget.COMPOSTER)) return
+        displayDirty = true
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
     fun onTick() {
         if (composterUpgradesInventory.isInside() && extraComposterUpgrade != null && lastHovered.passedSince() > 200.milliseconds) {
             extraComposterUpgrade = null
-            update()
-        }
-    }
-
-    @HandleEvent(InventoryFullyOpenedEvent::class, onlyOnIsland = IslandType.GARDEN)
-    fun onInventoryFullyOpened() {
-        if (inInventory) {
-            update()
+            displayDirty = true
         }
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onToolTip(event: ToolTipEvent) {
+    fun onInventoryFullyOpened() {
+        if (inInventory) displayDirty = true
+    }
+
+    @HandleEvent(onlyOnIsland = IslandType.GARDEN)
+    fun onToolTip(event: ToolTipTextEvent) {
         if (!composterUpgradesInventory.isInside()) return
         for (upgrade in ComposterUpgrade.entries) {
-            val name = event.itemStack.hoverName.formattedTextCompatLeadingWhiteLessResets()
+            val name = event.itemStack.cleanName
             if (name.contains(upgrade.displayName)) {
-                maxLevel = ComposterUpgrade.regex.matchMatcher(name) {
+                maxLevel = ComposterUpgradesData.composterUpgradePattern.matchMatcher(name) {
                     group("level")?.romanToDecimalIfNecessary() ?: 0
                 } == 25
                 extraComposterUpgrade = upgrade
-                update()
+                displayDirty = true
                 return
             }
         }
@@ -157,11 +155,11 @@ object ComposterOverlay {
             extraComposterUpgrade = null
             maxLevel = false
         }
-        update()
+        displayDirty = true
     }
 
     private fun update() {
-        if (!config.overlay) return
+        if (!isEnabled()) return
         val composterUpgrades = ComposterApi.composterUpgrades ?: return
         if (composterUpgrades.isEmpty()) {
             Renderable.text("§cOpen Composter Upgrades!").let {
@@ -274,11 +272,11 @@ object ComposterOverlay {
             addString("§7Items needed to fill §eOrganic Matter")
             val fillList = fillList(organicMatterFactors, missingOrganicMatter, testOffset) {
                 currentOrganicMatterItem = it
-                update()
+                displayDirty = true
             }
             if (currentOrganicMatterItem == NONE) {
                 currentOrganicMatterItem = fillList
-                update()
+                displayDirty = true
             }
         }
     }
@@ -292,11 +290,11 @@ object ComposterOverlay {
         val missingFuel = (maxFuel - currentFuel).toDouble()
         val fillList = fillList(fuelFactors, missingFuel) {
             currentFuelItem = it
-            update()
+            displayDirty = true
         }
         if (currentFuelItem == NONE) {
             currentFuelItem = fillList
-            update()
+            displayDirty = true
         }
     }
 
@@ -366,7 +364,7 @@ object ComposterOverlay {
                 current = currentTimeType,
                 onChange = {
                     currentTimeType = it
-                    update()
+                    displayDirty = true
                 },
             )
 
@@ -427,7 +425,7 @@ object ComposterOverlay {
 
         val testOffset = if (testOffsetRec > map.size) {
             ChatUtils.userError("Invalid Composter Overlay Offset! $testOffset cannot be greater than ${map.size}!")
-            ComposterOverlay.testOffset = 0
+            testOffset = 0
             0
         } else testOffsetRec
 
@@ -436,7 +434,7 @@ object ComposterOverlay {
             add(
                 Renderable.link("testOffset = $testOffset") {
                     ComposterOverlay.testOffset = 0
-                    update()
+                    displayDirty = true
                 },
             )
         }
@@ -508,7 +506,7 @@ object ComposterOverlay {
 
             add("")
             if (selected) {
-                add(internalName.createBuyTipLine("Control + "))
+                add(internalName.createBuyTipLine("${KeyboardManager.getModifierKeyName()} + "))
             } else {
                 add("§eClick to select for profit calculations!")
             }
@@ -524,7 +522,7 @@ object ComposterOverlay {
                 onClick(internalName)
                 if (KeyboardManager.isModifierKeyDown() && lastAttemptTime.passedSince() > 500.milliseconds) {
                     lastAttemptTime = SimpleTimeMark.now()
-                    retrieveMaterials(internalName, itemName, itemsNeeded.toInt())
+                    retrieveMaterials(internalName, internalName.repoItemName.removeColor(), itemsNeeded)
                 }
             },
             tips = tips,
@@ -545,24 +543,31 @@ object ComposterOverlay {
             return
         }
 
-        val havingInSacks = internalName.getAmountInSacksOrNull() ?: run {
-            GetFromSackApi.getFromSack(internalName, itemsNeeded - havingInInventory)
-            // TODO Add sack type repo data
+        val havingInSacks: Int
+        if (internalName.isMissingSackItem()) {
+            // sunflower oil doesn't go into sacks so have to do this
+            havingInSacks = 0
+        } else {
+            havingInSacks = internalName.getAmountInSacksOrNull() ?: run {
+                GetFromSackApi.getFromSack(internalName, itemsNeeded - havingInInventory)
+                // TODO Add sack type repo data
 
-            val isDwarvenMineable = internalName.let { it == VOLTA || it == OIL_BARREL || it == BIOFUEL }
-            val sackType = if (isDwarvenMineable) "Mining §eor §9Dwarven" else "Enchanted Agronomy"
-            ChatUtils.clickableChat(
-                "Sacks could not be loaded. Click here and open your §9$sackType Sack §eto update the data!",
-                onClick = { HypixelCommands.sacks() },
-                "§eClick to run /sax!",
-                replaceSameMessage = true,
-            )
-            return
+                val isDwarvenMineable = internalName.let { it == VOLTA || it == OIL_BARREL || it == BIOFUEL }
+                val sackType = if (isDwarvenMineable) "Mining §eor §9Dwarven" else "Enchanted Agronomy"
+                ChatUtils.clickableChat(
+                    "Sacks could not be loaded. Click here and open your §9$sackType Sack §eto update the data!",
+                    onClick = { HypixelCommands.sacks() },
+                    "§eClick to run /sax!",
+                    replaceSameMessage = true,
+                )
+                return
+            }
         }
         if (havingInSacks == 0) {
             SoundUtils.playErrorSound()
             if (SkyBlockUtils.noTradeMode) {
-                ChatUtils.chat("No $itemName §efound in sacks.")
+                ChatUtils.chat("No $itemName §efound in sacks. Opening recipe.")
+                HypixelCommands.recipe(itemName)
             } else {
                 ChatUtils.chat("No $itemName §efound in sacks. Opening Bazaar.")
                 BazaarApi.searchForBazaarItem(itemName, itemsNeeded)
@@ -593,15 +598,15 @@ object ComposterOverlay {
         return price
     }
 
-    @HandleEvent(NeuRepositoryReloadEvent::class)
+    @HandleEvent
     fun onNeuRepoReload() {
         updateOrganicMatterFactors()
     }
 
     // hopefully fix the display not working properly
     @HandleEvent
-    fun onIslandSwap(event: IslandChangeEvent) {
-        if (event.newIsland != IslandType.GARDEN) return
+    fun onIslandJoin(event: IslandJoinEvent) {
+        if (event.island != IslandType.GARDEN) return
         updateOrganicMatterFactors()
     }
 
@@ -613,7 +618,7 @@ object ComposterOverlay {
         updateOrganicMatterFactors()
     }
 
-    @HandleEvent(ConfigLoadEvent::class)
+    @HandleEvent
     fun onConfigLoad() {
         with(config) {
             ConditionalUtils.onToggle(minimumOrganicMatter) {
@@ -625,6 +630,7 @@ object ComposterOverlay {
     private fun updateOrganicMatterFactors() {
         try {
             organicMatterFactors = updateOrganicMatterFactors(organicMatter)
+            displayDirty = true
         } catch (e: Exception) {
             ErrorManager.logErrorWithData(
                 e, "Failed to calculate composter overlay data",
@@ -633,52 +639,51 @@ object ComposterOverlay {
         }
     }
 
+    // todo repo
     private val blockedItems = listOf(
         "POTION_AFFINITY_TALISMAN",
         "CROPIE_TALISMAN",
         "SPEED_TALISMAN",
         "SIMPLE_CARROT_CANDY",
-    )
+    ).map { it.toInternalName() }
 
-    private fun isBlockedArmor(internalName: String): Boolean {
-        return internalName.endsWith("_BOOTS") ||
-            internalName.endsWith("_HELMET") ||
-            internalName.endsWith("_CHESTPLATE") ||
-            internalName.endsWith("_LEGGINGS")
-    }
+    private val HUGE_MUSHROOM_1 = "ENCHANTED_HUGE_MUSHROOM_1".toInternalName()
+    private val HUGE_MUSHROOM_2 = "ENCHANTED_HUGE_MUSHROOM_2".toInternalName()
 
     private fun updateOrganicMatterFactors(baseValues: Map<NeuInternalName, Double>): Map<NeuInternalName, Double> {
         val map = mutableMapOf<NeuInternalName, Double>()
-        for ((internalName, _) in NeuItems.allNeuRepoItems()) {
-            if (blockedItems.contains(internalName) || isBlockedArmor(internalName)) continue
+        for (internalName in NeuItems.allNeuRepoInternalNames()) {
+            if (blockedItems.contains(internalName) || internalName.isArmor()) continue
 
-            var (newId, amount) = NeuItems.getPrimitiveMultiplier(internalName.toInternalName())
-            if (internalName == "ENCHANTED_HUGE_MUSHROOM_1" || internalName == "ENCHANTED_HUGE_MUSHROOM_2") {
+            var (newId, amount) = NeuItems.getPrimitiveMultiplier(internalName)
+            if (internalName == HUGE_MUSHROOM_1 || internalName == HUGE_MUSHROOM_2) {
                 //  160 * 8 * 4 is 5120 and not 5184, but hypixel made an error, so we have to copy the error
                 amount = 5184
             }
             baseValues[newId]?.let {
                 val totalOrganicMatter = it * amount
                 if (totalOrganicMatter <= config.minimumOrganicMatter.get()) continue
-                map[internalName.toInternalName()] = totalOrganicMatter
+                map[internalName] = totalOrganicMatter
             }
         }
         return map
     }
 
-    @HandleEvent(GuiRenderEvent.ChestGuiOverlayRenderEvent::class)
-    fun onBackgroundDraw() {
+    @HandleEvent
+    fun onChestGuiRender() {
+        if (!isEnabled() || !inInventory) return
         if (EstimatedItemValue.isCurrentlyShowing()) return
+        if (displayDirty) {
+            update()
+            displayDirty = false
+        }
 
-        if (!inInventory || !config.overlay) return
-        config.overlayOrganicMatterPos.renderRenderable(
-            organicMatterDisplay,
-            posLabel = "Composter Overlay Organic Matter",
-        )
-        config.overlayFuelExtrasPos.renderRenderable(
-            fuelExtraDisplay,
-            posLabel = "Composter Overlay Fuel Extras",
-        )
+        organicMatterDisplay?.let {
+            config.overlayOrganicMatterPos.renderRenderable(it, posLabel = "Composter Overlay Organic Matter")
+        }
+        fuelExtraDisplay?.let {
+            config.overlayFuelExtrasPos.renderRenderable(it, posLabel = "Composter Overlay Fuel Extras")
+        }
     }
 
     enum class TimeType(val display: String, val multiplier: Int) {
@@ -701,7 +706,7 @@ object ComposterOverlay {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Garden Composter")
 
         event.addIrrelevant {
@@ -721,7 +726,7 @@ object ComposterOverlay {
             add(" ")
             val tabListData = ComposterApi.tabListData
             for ((a, b) in tabListData) {
-                add("tabListData $a: $b")
+                add("tabListData $a: ${b.string}")
             }
         }
     }
@@ -731,14 +736,12 @@ object ComposterOverlay {
         event.registerBrigadier("shtestcomposter") {
             description = "Test the composter overlay"
             category = CommandCategory.DEVELOPER_DEBUG
-            legacyCallbackArgs {
-                if (it.size != 1) {
-                    ChatUtils.userError("Usage: /shtestcomposter <offset>")
-                } else {
-                    testOffset = it[0].toInt()
-                    ChatUtils.chat("Composter test offset set to $testOffset.")
-                }
+            argCallback("offset", BrigadierArguments.integer()) {
+                testOffset = it
+                ChatUtils.chat("Composter test offset set to $testOffset.")
             }
         }
     }
+
+    fun isEnabled(): Boolean = config.overlay
 }

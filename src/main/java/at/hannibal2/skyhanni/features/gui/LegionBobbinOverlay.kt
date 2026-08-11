@@ -4,7 +4,6 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.jsonobjects.repo.ItemsJson
 import at.hannibal2.skyhanni.data.mob.MobFilter.isRealPlayer
-import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.EntityUtils
@@ -14,10 +13,14 @@ import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getHypixelEnchantments
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getItemUuid
 import at.hannibal2.skyhanni.utils.collection.TimeLimitedCache
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat.isLocalPlayer
+import at.hannibal2.skyhanni.utils.compat.append
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.bold
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
+import at.hannibal2.skyhanni.utils.compat.withColor
 import at.hannibal2.skyhanni.utils.renderables.Renderable
-import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
-import at.hannibal2.skyhanni.utils.renderables.primitives.text
+import at.hannibal2.skyhanni.utils.renderables.toRenderables
+import net.minecraft.ChatFormatting
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.projectile.FishingHook
 import kotlin.time.Duration.Companion.seconds
@@ -78,8 +81,8 @@ object LegionBobbinOverlay {
     @HandleEvent(onlyOnSkyblock = true)
     fun onTick() {
         if (!isEnabled()) return
-        val bobbers = EntityUtils.getEntitiesNextToPlayer<FishingHook>(BOBBERS_DISTANCE).size
-        val players = EntityUtils.getEntitiesNextToPlayer<Player>(LEGION_DISTANCE).count {
+        val bobbers = EntityUtils.getEntitiesNearby<FishingHook>(BOBBERS_DISTANCE).size
+        val players = EntityUtils.getEntitiesNearby<Player>(LEGION_DISTANCE).count {
             !it.isLocalPlayer && it.isRealPlayer()
         }
         nearbyBobbers = modifyValue(nearbyBobbers, bobbers.coerceAtMost(BOBBERS_LIMIT))
@@ -114,32 +117,44 @@ object LegionBobbinOverlay {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onGuiRender(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay() {
         if (!isEnabled()) return
         val renderables = display ?: createRenderable().also { display = it }
         config.position.renderRenderables(renderables, posLabel = "Legion Bobbin Display")
     }
 
-    private fun createRenderable(): List<Renderable> {
-        return buildList {
-            if (!config.hideWithoutEnchant || wearingLegion) add(
-                Renderable.horizontal(
-                    listOf(
-                        Renderable.text("§d§lLegion: "),
-                        Renderable.text("§b$nearbyPlayers §7(${(armorLegionBuff * nearbyPlayers).roundTo(2)}%)"),
-                    ),
-                ),
-            )
-            if (!config.hideWithoutEnchant || wearingBobbin) add(
-                Renderable.horizontal(
-                    listOf(
-                        Renderable.text("§3§lBobbin': "),
-                        Renderable.text("§b$nearbyBobbers §7(${(armorBobbinBuff * nearbyBobbers).roundTo(2)}%)"),
-                    ),
-                ),
+    private fun createRenderable() = buildList {
+        if (!config.hideWithoutEnchant || wearingLegion) {
+            add(
+                componentBuilder {
+                    append("Legion: ") {
+                        withColor(ChatFormatting.LIGHT_PURPLE)
+                        bold = true
+                    }
+                    appendWithColor("$nearbyPlayers ", ChatFormatting.AQUA)
+                    appendWithColor(
+                        "(${(armorLegionBuff * nearbyPlayers).roundTo(2)}%)",
+                        ChatFormatting.GRAY,
+                    )
+                }
             )
         }
-    }
+        if (!config.hideWithoutEnchant || wearingBobbin) {
+            add(
+                componentBuilder {
+                    append("Bobbin': ") {
+                        withColor(ChatFormatting.DARK_AQUA)
+                        bold = true
+                    }
+                    appendWithColor("$nearbyBobbers ", ChatFormatting.AQUA)
+                    appendWithColor(
+                        "(${(armorBobbinBuff * nearbyBobbers).roundTo(2)}%)",
+                        ChatFormatting.GRAY,
+                    )
+                }
+            )
+        }
+    }.toRenderables()
 
     private fun isEnabled() = config.enabled
 }

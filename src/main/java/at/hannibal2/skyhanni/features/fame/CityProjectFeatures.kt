@@ -5,8 +5,10 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.data.EntityMovementData
 import at.hannibal2.skyhanni.data.IslandGraphs
+import at.hannibal2.skyhanni.data.IslandGraphs.pathFind
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.ProfileStorageData
+import at.hannibal2.skyhanni.data.model.graph.GraphNodeTag
 import at.hannibal2.skyhanni.events.GuiContainerEvent
 import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.InventoryCloseEvent
@@ -22,7 +24,6 @@ import at.hannibal2.skyhanni.utils.ItemUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
 import at.hannibal2.skyhanni.utils.LorenzColor
-import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.NeuInternalName
 import at.hannibal2.skyhanni.utils.NeuItems.getItemStack
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
@@ -31,22 +32,21 @@ import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils.highlight
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderable
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SignUtils
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.TimeUtils
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addItemStack
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
 import at.hannibal2.skyhanni.utils.renderables.container.VerticalContainerRenderable.Companion.vertical
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.client.gui.screens.inventory.SignEditScreen
 import net.minecraft.world.inventory.ChestMenu
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -91,9 +91,9 @@ object CityProjectFeatures {
             action = {
                 HypixelCommands.warp("elizabeth")
                 EntityMovementData.onNextTeleport(IslandType.HUB) {
-                    IslandGraphs.pathFind(
-                        LorenzVec(-1.7, 72.0, -102.0),
-                        "§aCity Project",
+
+                    IslandGraphs.node("City Project", GraphNodeTag.POI).pathFind(
+                        label = "§aCity Project",
                         condition = { config.dailyReminder },
                     )
                 }
@@ -117,7 +117,7 @@ object CityProjectFeatures {
             // internal name -> amount
             val materials = mutableMapOf<NeuInternalName, Int>()
             for ((_, item) in event.inventoryItems) {
-                if (item.hoverName.formattedTextCompatLeadingWhiteLessResets() != "§eContribute this component!") continue
+                if (item.hoverName.string != "Contribute this component!") continue
                 fetchMaterials(item, materials)
             }
 
@@ -147,7 +147,7 @@ object CityProjectFeatures {
                         nextTime = endTime
                     }
                 }
-                if (item.hoverName.formattedTextCompatLeadingWhiteLessResets() != "§eContribute this component!") continue
+                if (item.hoverName.string != "Contribute this component!") continue
                 nextTime = now
             }
             ProfileStorageData.playerSpecific?.nextCityProjectParticipationTime = nextTime
@@ -190,15 +190,15 @@ object CityProjectFeatures {
     private fun materialLink(name: String, amount: Int): Renderable = Renderable.optionalLink(
         "$name §ex${amount.addSeparators()}",
         {
-            if (Minecraft.getInstance().screen is SignEditScreen) {
+            if (MinecraftCompat.screen is SignEditScreen) {
                 SignUtils.setTextIntoSign("$amount")
             } else {
-                BazaarApi.searchForBazaarItem(name, amount)
+                BazaarApi.searchForBazaarItemOrRecipe(name, amount)
             }
         },
     ) { inInventory }
 
-    private fun fetchMaterials(item: ItemStack, materials: MutableMap<NeuInternalName, Int>) {
+    private fun fetchMaterials(item: SafeItemStack, materials: MutableMap<NeuInternalName, Int>) {
         var next = false
         val lore = item.getLore()
         val completed = lore.lastOrNull()?.let { completedPattern.matches(it) } ?: false
@@ -221,11 +221,13 @@ object CityProjectFeatures {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (!config.showMaterials) return
         if (!inInventory) return
 
-        config.pos.renderRenderable(display, posLabel = "City Project Materials")
+        display?.let {
+            config.pos.renderRenderable(it, posLabel = "City Project Materials")
+        }
     }
 
     @HandleEvent(onlyOnSkyblock = true)

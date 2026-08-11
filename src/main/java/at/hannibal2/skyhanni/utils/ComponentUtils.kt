@@ -11,7 +11,8 @@ import at.hannibal2.skyhanni.data.jsonobjects.other.toGameProfile
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ItemUtils.getItemModel
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
-import at.hannibal2.skyhanni.utils.ItemUtils.setLore
+import at.hannibal2.skyhanni.utils.ItemUtils.setLoreString
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompat
 import at.hannibal2.skyhanni.utils.compat.getIdentifierString
 import at.hannibal2.skyhanni.utils.compat.setCustomItemName
@@ -19,16 +20,15 @@ import com.google.gson.JsonObject
 import com.mojang.serialization.JsonOps
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.NbtOps
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
 import net.minecraft.util.Unit
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.component.DyedItemColor
 import net.minecraft.world.item.component.ResolvableProfile
 import kotlin.jvm.optionals.getOrNull
 
 object ComponentUtils {
-    fun convertToComponents(stack: ItemStack, nbtInfo: NeuNbtInfoJson?) {
+    fun convertToComponents(stack: SafeItemStack, nbtInfo: NeuNbtInfoJson?) {
         nbtInfo ?: return
         nbtInfo.extraAttributes?.let { extraJson ->
             val extraAttributes = JsonOps.INSTANCE
@@ -43,7 +43,7 @@ object ComponentUtils {
         if (nbtInfo.unbreakable?.boolean == true) {
             stack.set(DataComponents.UNBREAKABLE, Unit.INSTANCE)
         }
-        nbtInfo.itemModel?.let { stack.set(DataComponents.ITEM_MODEL, ResourceLocation.parse(it)) }
+        nbtInfo.itemModel?.let { stack.set(DataComponents.ITEM_MODEL, Identifier.parse(it)) }
         if (nbtInfo.display != null) {
             val display = nbtInfo.display
             if (display.color != null) {
@@ -55,30 +55,21 @@ object ComponentUtils {
                 ErrorManager.skyHanniError("stack display name is null", "extra attributes" to nbtInfo.extraAttributes)
             }
             if (display.lore != null) {
-                stack.setLore(display.lore)
+                stack.setLoreString(display.lore)
             }
         }
         if (nbtInfo.skullOwner != null) {
             val skullOwner = nbtInfo.skullOwner
-            //#if MC < 1.21.9
-            stack.set(DataComponents.PROFILE, ResolvableProfile(skullOwner.toGameProfile()))
-            //#else
-            //$$ stack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(skullOwner.toGameProfile()))
-            //#endif
+            stack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(skullOwner.toGameProfile()))
         }
 
     }
 
-    fun convertToNeuNbtInfoJson(stack: ItemStack): JsonObject {
+    fun convertToNeuNbtInfoJson(stack: SafeItemStack): JsonObject {
         val isUnbreakable = NbtBoolean(stack.has(DataComponents.UNBREAKABLE))
         val profile = stack.get(DataComponents.PROFILE)
-        //#if MC < 1.21.9
-        val profileProperties = profile?.properties?.get("textures")?.firstOrNull()
-        val uuid = profile?.id?.getOrNull() ?: "53924f1a-87e6-4709-8e53-f1c7d13dc239"
-        //#else
-        //$$ val profileProperties = profile?.partialProfile()?.properties?.get("textures")?.firstOrNull()
-        //$$ val uuid = profile?.partialProfile()?.id ?: "53924f1a-87e6-4709-8e53-f1c7d13dc239"
-        //#endif
+        val profileProperties = profile?.partialProfile()?.properties?.get("textures")?.firstOrNull()
+        val uuid = profile?.partialProfile()?.id ?: "53924f1a-87e6-4709-8e53-f1c7d13dc239"
         val value = profileProperties?.value
         val signature = profileProperties?.signature
         val propertiesInfo = PropertiesInfo(listOf(TextureInfo(value = value, signature = signature)))

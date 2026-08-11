@@ -33,7 +33,12 @@ class AttributeShardsConfig {
     var includeHuntingBox: Boolean = true
 
     @Expose
-    @ConfigOption(name = "Only Current Inventory", desc = "Only show the shards that are in the current inventory you have open.")
+    @ConfigOption(name = "Include Bazaar Orders", desc = "Accounts for the shards you currently have on order in the bazaar.")
+    @ConfigEditorBoolean
+    var includeBazaarOrders: Boolean = true
+
+    @Expose
+    @ConfigOption(name = "Only Current Inventory", desc = "Only show the shards that are in the inventory you currently have open.")
     @ConfigEditorBoolean
     var onlyCurrentInventory: Boolean = false
 
@@ -64,11 +69,6 @@ class AttributeShardsConfig {
     @ConfigEditorBoolean
     @FeatureToggle
     var huntingBoxValue: Boolean = true
-
-    @Expose
-    @ConfigOption(name = "Export to SkyShards", desc = "Displays a button in the hunting box to export to and open SkyShards.")
-    @ConfigEditorBoolean
-    var exportToSkyShards: Boolean = true
 
     @Expose
     @ConfigLink(owner = AttributeShardsConfig::class, field = "enabled")

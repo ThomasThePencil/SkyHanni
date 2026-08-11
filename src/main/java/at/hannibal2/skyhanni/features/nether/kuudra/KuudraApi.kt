@@ -21,8 +21,8 @@ object KuudraApi {
     private val patternGroup = RepoPattern.group("data.kuudra")
 
     /**
-     * REGEX-TEST:  §7⏣ §cKuudra's Hollow §8(T5)
-     * REGEX-TEST:  §7⏣ §cKuudra's Hollow §8(T2)
+     * WRAPPED-REGEX-TEST: " §7⏣ §cKuudra's Hollow §8(T5)"
+     * WRAPPED-REGEX-TEST: " §7⏣ §cKuudra's Hollow §8(T2)"
      */
     private val tierPattern by patternGroup.pattern(
         "scoreboard.tier",
@@ -112,7 +112,7 @@ object KuudraApi {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         completePattern.matchMatcher(event.message) {
             val tier = kuudraTier ?: return
             KuudraCompleteEvent(tier).post()

@@ -2,12 +2,13 @@ package at.hannibal2.skyhanni.config.features.misc
 
 import at.hannibal2.skyhanni.config.FeatureToggle
 import at.hannibal2.skyhanni.config.NoConfigLink
-import at.hannibal2.skyhanni.config.OnlyModern
 import at.hannibal2.skyhanni.config.core.config.Position
 import at.hannibal2.skyhanni.config.enums.OutsideSBFeature
 import at.hannibal2.skyhanni.config.features.commands.CommandsConfig
 import at.hannibal2.skyhanni.config.features.minion.MinionsConfig
 import at.hannibal2.skyhanni.config.features.misc.frogmask.FrogMaskFeaturesConfig
+import at.hannibal2.skyhanni.config.features.misc.navigation.NavigationConfig
+import at.hannibal2.skyhanni.config.features.misc.tracker.UniversalTrackerConfig
 import at.hannibal2.skyhanni.config.features.pets.PetConfig
 import at.hannibal2.skyhanni.config.features.stranded.StrandedConfig
 import com.google.gson.annotations.Expose
@@ -15,6 +16,7 @@ import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.Category
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorInfoText
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorKeybind
 import io.github.notenoughupdates.moulconfig.annotations.ConfigLink
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
@@ -22,6 +24,7 @@ import io.github.notenoughupdates.moulconfig.annotations.SearchTag
 import io.github.notenoughupdates.moulconfig.observer.Property
 import org.lwjgl.glfw.GLFW
 
+@Suppress("AvoidBritishSpelling")
 class MiscConfig {
     @Expose
     @Category(name = "Pets", desc = "Pets Settings")
@@ -44,12 +47,8 @@ class MiscConfig {
     val stranded: StrandedConfig = StrandedConfig()
 
     @Expose
-    @Category(name = "Area Navigation", desc = "Helps navigate to different areas on the current island.")
-    val areaNavigation: AreaNavigationConfig = AreaNavigationConfig()
-
-    @Expose
-    @Category(name = "Pathfinding", desc = "General settings for Pathfinding/Navigating in different features.")
-    val pathfinding: PathfindConfig = PathfindConfig()
+    @Category(name = "Navigation", desc = "Navigation features and other related settings.")
+    val navigation: NavigationConfig = NavigationConfig()
 
     @ConfigOption(name = "Hide Armor", desc = "")
     @Accordion
@@ -95,7 +94,7 @@ class MiscConfig {
     @Expose
     @ConfigOption(name = "Tracker", desc = "Tracker Config")
     @Accordion
-    val tracker: TrackerConfig = TrackerConfig()
+    val tracker: UniversalTrackerConfig = UniversalTrackerConfig()
 
     @Expose
     @ConfigOption(name = "Pet Candy Display", desc = "")
@@ -107,10 +106,11 @@ class MiscConfig {
     @Accordion
     val bits: BitsConfig = BitsConfig()
 
+    // TODO rename to coordsWaypoint
     @Expose
-    @ConfigOption(name = "Patcher Coords Waypoints", desc = "")
+    @ConfigOption(name = "Coords Waypoints", desc = "")
     @Accordion
-    val patcherCoordsWaypoint: PatcherCoordsWaypointConfig = PatcherCoordsWaypointConfig()
+    val patcherCoordsWaypoint: CoordsWaypointConfig = CoordsWaypointConfig()
 
     @Expose
     @ConfigOption(name = "Reminders", desc = "")
@@ -158,6 +158,20 @@ class MiscConfig {
     val colorfulItemTooltips: ColorfulItemTooltips = ColorfulItemTooltips()
 
     @Expose
+    @ConfigOption(
+        name = "Glowing Dropped Items",
+        desc = "Gives items on the ground that Hypixel doesn't already highlight a glowing outline based on their rarity.",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var glowingDroppedItems: Boolean = false
+
+    @Expose
+    @ConfigOption(name = "Boop Party", desc = "")
+    @Accordion
+    val boopParty: BoopPartyConfig = BoopPartyConfig()
+
+    @Expose
     @ConfigOption(name = "Reset Search on Close", desc = "Reset the search in GUIs after closing the inventory.")
     @ConfigEditorBoolean
     var resetSearchGuiOnClose: Boolean = true
@@ -203,9 +217,14 @@ class MiscConfig {
     var brewingStandOverlay: Boolean = true
 
     @Expose
-    @ConfigOption(name = "Crash On Death", desc = "Crashes your game every time you die in Skyblock")
+    @ConfigOption(name = "Crash on Death", desc = "Crashes your game every time you die in SkyBlock")
     @ConfigEditorBoolean
     var crashOnDeath: Boolean = false
+
+    @Expose
+    @ConfigOption(name = "Crash on TTT Fail", desc = "Crashes your game every time you fail Tic-Tac-Toe in Dungeons")
+    @ConfigEditorBoolean
+    var crashOnTttFail: Boolean = false
 
     @Expose
     @ConfigOption(
@@ -301,15 +320,6 @@ class MiscConfig {
     var accountUpgradeReminder: Boolean = true
 
     @Expose
-    @ConfigOption(
-        name = "Fix Patcher Lines",
-        desc = "Suggest in chat to disable Patcher's `parallax fix` that breaks SkyHanni's line from middle of player to somewhere else.",
-    )
-    @ConfigEditorBoolean
-    @FeatureToggle
-    var fixPatcherLines: Boolean = true
-
-    @Expose
     @ConfigOption(name = "Time In Limbo", desc = "Show the time since you entered the limbo.")
     @ConfigEditorBoolean
     @FeatureToggle
@@ -331,27 +341,19 @@ class MiscConfig {
     @FeatureToggle
     var lesserOrbHider: Boolean = false
 
-    @Expose
-    @ConfigOption(name = "Lock Mouse Message", desc = "Show a message in chat when toggling §e/shmouselock§7.")
-    @ConfigEditorBoolean
-    var lockMouseLookChatMessage: Boolean = true
-
-    @Expose
-    @NoConfigLink
-    val lockedMouseDisplay: Position = Position(400, 200, 0.8f)
-
-    @Expose
-    @ConfigOption(
+    // doesn't work properly
+    /*@ConfigOption(
         name = "Fix Ghost Entities",
         desc = "Remove ghost entities caused by a Hypixel bug.\n" +
             "This includes Diana, Dungeon and Crimson Isle mobs and nametags.",
     )
     @ConfigEditorBoolean
-    @FeatureToggle
+    @FeatureToggle*/
+    @Expose
     var fixGhostEntities: Boolean = true
 
     @Expose
-    @ConfigOption(name = "Replace Roman Numerals", desc = "Replace Roman Numerals with Arabic Numerals on any item.")
+    @ConfigOption(name = "Replace Roman Numerals", desc = "Replace Roman Numerals with Arabic Numerals in some SkyHanni displays.")
     @ConfigEditorBoolean
     @FeatureToggle
     val replaceRomanNumerals: Property<Boolean> = Property.of(false)
@@ -385,6 +387,11 @@ class MiscConfig {
     val lastStorage: LastStorageConfig = LastStorageConfig()
 
     @Expose
+    @ConfigOption(name = "Custom Todos", desc = "")
+    @Accordion
+    val customTodos: CustomTodosConfig = CustomTodosConfig()
+
+    @Expose
     @ConfigOption(
         name = "Maintain Volume During Warnings",
         desc = "Do not change game volume levels when warning sounds are played.",
@@ -396,10 +403,19 @@ class MiscConfig {
     @Expose
     @ConfigOption(
         name = "Fast Fairy Souls",
-        desc = "Uses a fast pathfinder route to get to all Fairy Souls on the current island. §eDoes not require NEU. ",
+        desc = "Uses a fast pathfinder route to get to all Fairy Souls on the current island.",
     )
     @ConfigEditorBoolean
     var fastFairySouls: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Spider Den Relic Pathfinder",
+        desc = "Uses a fast pathfinder route to get to all Relics in Spider's Den.",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var spiderRelicPathfinder: Boolean = false
 
     @Expose
     @ConfigOption(
@@ -409,6 +425,15 @@ class MiscConfig {
     @ConfigEditorBoolean
     @FeatureToggle
     var gfsPiggyBank: Boolean = true
+
+    // Not a FeatureToggle: moving a Hypixel UI element is a personal preference, not a feature to auto-enable.
+    @Expose
+    @ConfigOption(
+        name = "Move Insert Into Sack Button",
+        desc = "Moves the \"Insert Into Sack\" button to a more convenient location in the sack menu.",
+    )
+    @ConfigEditorBoolean
+    var moveInsertIntoSackButton: Boolean = false
 
     @Expose
     @ConfigOption(name = "SkyHanni User Luck", desc = "Shows SkyHanni User Luck in the SkyBlock Stats.")
@@ -427,10 +452,14 @@ class MiscConfig {
     var warnAboutPcTimeOffset: Boolean = true
 
     @Expose
+    @ConfigOption(name = "NPC Daily Limit Tracker", desc = "")
+    @Accordion
+    val npcDayLimitTracker: NpcDayLimitTrackerConfig = NpcDayLimitTrackerConfig()
+
+    @Expose
     @ConfigOption(name = "Coral Fish Helper", desc = "Shows a helper for which fish are cheapest to buy for the NPC §dCoral§7.")
     @ConfigEditorBoolean
     @FeatureToggle
-    @OnlyModern
     var coralFishHelper: Boolean = true
 
     @Expose
@@ -468,6 +497,57 @@ class MiscConfig {
     )
     @ConfigEditorBoolean
     @FeatureToggle
-    @OnlyModern
     var fixDoubleClicks: Boolean = true
+
+
+    @ConfigOption(
+        name = "Color Particle Warning",
+        desc = "§c§lThis can break particle Coloring in parts of Skyblock where it is done properly.",
+    )
+    @ConfigEditorInfoText
+    @SearchTag("Fixes Hypixel not setting colored particles properly such as Slayer Specific Spawn Particles or Motes Fix Colored Particles")
+    val notice: String = ""
+
+    @Expose
+    @ConfigOption(
+        name = "Fix Colored Particles",
+        desc = "Fixes Hypixel not setting colored particles properly such as Slayer Specific Spawn Particles or Motes.",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    @SearchTag("Colour Spell Spawn Specific")
+    var fixColorParticles: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Rainbow Action Bar",
+        desc = "Makes the Action bar rainbow. Why? For fun!",
+    )
+    @ConfigEditorBoolean
+    var rainbowActionBar: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Show Achievement Messages",
+        desc = "You can do §e/shachievements§7 to see them all!",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var achievementMessages: Boolean = true
+
+    @Expose
+    @ConfigOption(
+        name = "Mute Stereo Pants",
+        desc = "Mutes music played by Stereo Pants.",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var muteStereoPants: Boolean = false
+
+    @Expose
+    @ConfigOption(name = "Gift Clean Display", desc = "Show only 'CLICK TO OPEN' on gifts.")
+    @SearchTag("century cake slice")
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var giftCleanDisplay: Boolean = false
 }

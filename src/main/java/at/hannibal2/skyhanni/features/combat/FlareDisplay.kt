@@ -5,16 +5,14 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.features.combat.FlareConfig
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
+import at.hannibal2.skyhanni.events.entity.EntityEquipmentChangeEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
-import at.hannibal2.skyhanni.utils.AllEntitiesGetter
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ColorUtils.rgb
 import at.hannibal2.skyhanni.utils.ColorUtils.toColor
-import at.hannibal2.skyhanni.utils.EntityUtils
-import at.hannibal2.skyhanni.utils.EntityUtils.canBeSeen
 import at.hannibal2.skyhanni.utils.EntityUtils.hasSkullTexture
 import at.hannibal2.skyhanni.utils.GuiRenderUtils
 import at.hannibal2.skyhanni.utils.LorenzVec
@@ -53,16 +51,17 @@ object FlareDisplay {
 
     private val MAX_FLARE_TIME = 3.minutes
 
-    private val flareSkins by lazy {
-        mapOf(
-            SkullTextureHolder.getTexture("FLARE_WARNING") to FlareType.WARNING,
-            SkullTextureHolder.getTexture("FLARE_ALERT") to FlareType.ALERT,
-            SkullTextureHolder.getTexture("FLARE_SOS") to FlareType.SOS,
-        )
-    }
+    private val FLARE_WARNING by SkullTextureHolder.texture("FLARE_WARNING")
+    private val FLARE_ALERT by SkullTextureHolder.texture("FLARE_ALERT")
+    private val FLARE_SOS by SkullTextureHolder.texture("FLARE_SOS")
+    private val flareSkins get() = mapOf(
+        FlareType.WARNING to FLARE_WARNING,
+        FlareType.ALERT to FLARE_ALERT,
+        FlareType.SOS to FLARE_SOS,
+    )
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!enabled) return
 
         if (config.flashScreen && activeWarning) {
@@ -80,21 +79,22 @@ object FlareDisplay {
         config.position.renderRenderables(display, posLabel = "Flare Timer")
     }
 
-    // TODO: replace getEntities with entity events
-    @OptIn(AllEntitiesGetter::class)
+    @HandleEvent(onlyOnSkyblock = true)
+    fun onEntitySpawn(event: EntityEquipmentChangeEvent<ArmorStand>) {
+        if (!enabled) return
+        val entity = event.entity
+        if (entity.tickCount.ticks > MAX_FLARE_TIME) return
+        if (isAlreadyKnownFlare(entity)) return
+        getFlareTypeForTexture(entity)?.let {
+            flares.add(Flare(it, entity))
+        }
+        activeWarning = false
+    }
+
     @HandleEvent(onlyOnSkyblock = true)
     fun onSecondPassed(event: SecondPassedEvent) {
         if (!enabled) return
         flares.removeIf { !it.entity.isAlive }
-        for (entity in EntityUtils.getEntities<ArmorStand>()) {
-            if (!entity.canBeSeen()) continue
-            if (entity.tickCount.ticks > MAX_FLARE_TIME) continue
-            if (isAlreadyKnownFlare(entity)) continue
-            getFlareTypeForTexture(entity)?.let {
-                flares.add(Flare(it, entity))
-            }
-            activeWarning = false
-        }
         var newDisplay: List<Renderable>? = null
         for (type in FlareType.entries) {
             val flare = getFlareForType(type) ?: continue
@@ -148,7 +148,7 @@ object FlareDisplay {
     private fun getFlareForType(type: FlareType): Flare? = flares.firstOrNull { it.type == type }
 
     private fun getFlareTypeForTexture(entity: ArmorStand): FlareType? =
-        flareSkins.entries.firstOrNull { entity.hasSkullTexture(it.key) }?.value
+        flareSkins.entries.firstOrNull { entity.hasSkullTexture(it.value) }?.key
 
     private fun isAlreadyKnownFlare(entity: ArmorStand): Boolean =
         flares.any { it.entity.id == entity.id }
@@ -204,7 +204,7 @@ object FlareDisplay {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
+    fun onParticle(event: ParticleEvent) {
         if (!enabled) return
         if (!config.hideParticles) return
 

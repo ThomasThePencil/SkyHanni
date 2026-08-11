@@ -21,6 +21,7 @@ import at.hannibal2.skyhanni.utils.renderables.Searchable
 import at.hannibal2.skyhanni.utils.renderables.toSearchable
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import at.hannibal2.skyhanni.utils.tracker.ItemTrackerData
+import at.hannibal2.skyhanni.utils.tracker.SessionUptime
 import at.hannibal2.skyhanni.utils.tracker.SkyHanniItemTracker
 import com.google.gson.annotations.Expose
 import net.minecraft.world.phys.AABB
@@ -51,7 +52,12 @@ object DraconicSacrificeTracker {
     )
 
     private val tracker =
-        SkyHanniItemTracker("Draconic Sacrifice Profit Tracker", ::Data, { it.draconicSacrificeTracker }) {
+        SkyHanniItemTracker(
+            "Draconic Sacrifice Profit Tracker",
+            ::Data,
+            { it.draconicSacrificeTracker },
+            trackerConfig = { config.perTrackerConfig }
+        ) {
             drawDisplay(it)
         }
 
@@ -61,7 +67,7 @@ object DraconicSacrificeTracker {
     data class Data(
         @Expose var itemsSacrificed: Long = 0L,
         @Expose var sacrificedItemsMap: MutableMap<String, Long> = mutableMapOf(),
-    ) : ItemTrackerData() {
+    ) : ItemTrackerData<SessionUptime.Normal>(SessionUptime.Normal::class) {
         override fun getDescription(timesGained: Long): List<String> {
             val percentage = timesGained.toDouble() / itemsSacrificed
             val dropRate = percentage.coerceAtMost(1.0).formatPercentage()
@@ -100,7 +106,7 @@ object DraconicSacrificeTracker {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         sacrificeLoot.matchMatcher(event.message) {
             val amount = group("amount").toInt()
             val item = group("item")
@@ -133,12 +139,12 @@ object DraconicSacrificeTracker {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shresetdraconicsacrificetracker") {
+        event.registerBrigadier("shresetdraconicsacrificetracker") {
             description = "Resets the Draconic Sacrifice Tracker."
             category = CommandCategory.USERS_RESET
-            callback { tracker.resetCommand() }
+            simpleCallback { tracker.resetCommand() }
         }
     }
 
-    private fun isEnabled() = IslandType.THE_END.isCurrent() && config.enabled
+    private fun isEnabled() = IslandType.THE_END.isInIsland() && config.enabled
 }

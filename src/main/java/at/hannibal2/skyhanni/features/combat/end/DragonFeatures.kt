@@ -4,6 +4,7 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.data.IslandType
+import at.hannibal2.skyhanni.data.model.SkyblockStat
 import at.hannibal2.skyhanni.data.model.TabWidget
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.GuiRenderEvent
@@ -50,7 +51,7 @@ object DragonFeatures {
     private val repoGroup = RepoPattern.group("combat.boss.dragon.1")
     private val chatGroup = repoGroup.group("chat")
     private val scoreBoardGroup = repoGroup.group("scoreboard")
-    private val tabListGroup = repoGroup.group("tablist")
+    private val tabListGroup = repoGroup.group("tablist-nocolor")
 
     /**
      * REGEX-TEST: §5☬ §r§dYou placed a Summoning Eye! §r§7(§r§e2§r§7/§r§a8§r§7)
@@ -138,14 +139,14 @@ object DragonFeatures {
     private val scoreDragonPattern by scoreBoardGroup.pattern("dragon", "Dragon HP: .*")
 
     /**
-     * REGEX-TEST:  §r§bJamBeastie: §r§c7.4M❤
-     * REGEX-TEST:  §r§a42069HzMonitor: §r§c3M❤
-     * REGEX-TEST:  §r§bItsJxxxxx2001: §r§c457k❤
-     * REGEX-TEST:  §r§bThunderblade73: §r§c12.3k❤
+     * WRAPPED-REGEX-TEST: " JamBeastie: 7.4M"
+     * WRAPPED-REGEX-TEST: " 42069HzMonitor: 3M"
+     * WRAPPED-REGEX-TEST: " ItsJxxxxx2001: 457k"
+     * WRAPPED-REGEX-TEST: " Thunderblade73: 12.3k"
      */
     private val tabDamagePattern by tabListGroup.pattern(
         "fight.player",
-        ".*§r§.(?<name>.+): §r§c(?<damage>[\\d.]+[kM]?)❤",
+        "\\s(?<name>.+): (?<damage>[\\d.]+[kM]?)${SkyblockStat.HEALTH.hypixelIcon}",
     )
 
     private var yourEyes = 0
@@ -231,7 +232,7 @@ object DragonFeatures {
     private fun displayIsEnabled() = config.display && dragonSpawned
 
     @HandleEvent(onlyOnIsland = IslandType.THE_END)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         val message = event.message
 
         if (!config.chat && !config.display && !config.superiorNotify && !configProtector) return

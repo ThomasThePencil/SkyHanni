@@ -61,6 +61,11 @@ class CombatConfig {
     val flare: FlareConfig = FlareConfig()
 
     @Expose
+    @ConfigOption(name = "Deployable", desc = "")
+    @Accordion
+    val deployable: DeployableConfig = DeployableConfig()
+
+    @Expose
     @ConfigOption(name = "Broodmother", desc = "")
     @Accordion
     val broodmother: BroodmotherConfig = BroodmotherConfig()
@@ -69,6 +74,11 @@ class CombatConfig {
     @ConfigOption(name = "Instance Chest Profit", desc = "")
     @Accordion
     val instanceChestProfit: InstanceChestProfitConfig = InstanceChestProfitConfig()
+
+    @Expose
+    @ConfigOption(name = "Cocoon Overlay", desc = "")
+    @Accordion
+    val cocoonOverlay: CocoonOverlayConfig = CocoonOverlayConfig()
 
     @Expose
     @ConfigOption(name = "Hide Damage Splash", desc = "Hide all damage splashes anywhere in SkyBlock.")

@@ -5,13 +5,13 @@ import at.hannibal2.skyhanni.events.DrawScreenAfterEvent
 import at.hannibal2.skyhanni.events.GuiRenderItemEvent
 import at.hannibal2.skyhanni.events.RenderInventoryItemTipEvent
 import at.hannibal2.skyhanni.events.RenderItemTipEvent
-import at.hannibal2.skyhanni.mixins.transformers.gui.AccessorHandledScreen
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.GuiRenderUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.RenderUtils.drawSlotText
 import at.hannibal2.skyhanni.utils.compat.DrawContextUtils
 import at.hannibal2.skyhanni.utils.compat.InventoryCompat.orNull
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.container
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
@@ -41,34 +41,31 @@ object ItemTipHelper {
     fun onRenderInventoryItemOverlayPost(event: DrawScreenAfterEvent) {
         if (GlobalRender.renderDisabled) return
 
-        val gui = Minecraft.getInstance().screen
+        val gui = MinecraftCompat.screen
         if (gui !is ContainerScreen) return
         val inventoryName = InventoryUtils.openInventoryName()
 
-        val guiLeft = (gui as AccessorHandledScreen).guiLeft
-        val guiTop = (gui as AccessorHandledScreen).guiTop
         val fontRenderer = Minecraft.getInstance().font
 
-        DrawContextUtils.pushMatrix()
-        DrawContextUtils.translate(0f, 0f, 300f)
-        for (slot in gui.container.slots) {
-            val stack = slot.item.orNull() ?: continue
+        DrawContextUtils.pushPop {
+            for (slot in gui.container.slots) {
+                val stack = slot.item.orNull() ?: continue
 
-            val itemTipEvent = RenderInventoryItemTipEvent(inventoryName, slot, stack)
-            itemTipEvent.post()
-            val stackTip = itemTipEvent.stackTip
-            if (stackTip.isEmpty()) continue
+                val itemTipEvent = RenderInventoryItemTipEvent(inventoryName, slot, stack)
+                itemTipEvent.post()
+                val stackTip = itemTipEvent.stackTip
+                if (stackTip.isEmpty()) continue
 
-            val xDisplayPosition = slot.x
-            val yDisplayPosition = slot.y
+                val xDisplayPosition = slot.x
+                val yDisplayPosition = slot.y
 
-            val x = guiLeft + xDisplayPosition + 17 + itemTipEvent.offsetX - if (itemTipEvent.alignLeft) {
-                fontRenderer.width(stackTip)
-            } else 0
-            val y = guiTop + yDisplayPosition + 9 + itemTipEvent.offsetY
+                val x = gui.leftPos + xDisplayPosition + 17 + itemTipEvent.offsetX - if (itemTipEvent.alignLeft) {
+                    fontRenderer.width(stackTip)
+                } else 0
+                val y = gui.topPos + yDisplayPosition + 9 + itemTipEvent.offsetY
 
-            GuiRenderUtils.drawString(stackTip, x, y, -1)
+                GuiRenderUtils.drawString(stackTip, x, y, -1)
+            }
         }
-        DrawContextUtils.popMatrix()
     }
 }

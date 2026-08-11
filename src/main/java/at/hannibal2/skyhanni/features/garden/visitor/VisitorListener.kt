@@ -24,16 +24,15 @@ import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.KeyboardManager.isKeyHeld
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
-import at.hannibal2.skyhanni.utils.LorenzLogger
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
-import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
+import at.hannibal2.skyhanni.utils.SkyHanniLogger
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLessResets
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.exactLocation
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.network.protocol.game.ServerboundAttackPacket
 import net.minecraft.network.protocol.game.ServerboundInteractPacket
 import net.minecraft.world.entity.decoration.ArmorStand
 import kotlin.time.Duration.Companion.seconds
@@ -47,20 +46,23 @@ object VisitorListener {
 
     private val config get() = VisitorApi.config
 
-    private val logger = LorenzLogger("garden/visitors/listener")
+    private val logger = SkyHanniLogger("garden/visitors/listener")
 
-    @HandleEvent
-    fun onProfileJoin(event: ProfileJoinEvent) {
+    @HandleEvent(ProfileJoinEvent::class)
+    fun onProfileJoin() {
         VisitorApi.reset()
     }
 
     // TODO make event
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
     fun onSendEvent(event: PacketSentEvent) {
-        val packet = event.packet
-        if (packet !is ServerboundInteractPacket) return
+        val packetEntityId = when (val packet = event.packet) {
+            is ServerboundInteractPacket -> packet.entityId
+            is ServerboundAttackPacket -> packet.entityId
+            else -> return
+        }
 
-        val entity = MinecraftCompat.localWorld.getEntity(packet.entityId) ?: return
+        val entity = MinecraftCompat.localWorldOrThrow.getEntity(packetEntityId) ?: return
         val entityId = entity.id
 
         lastClickedNpc = entityId
@@ -70,8 +72,7 @@ object VisitorListener {
     fun onWidgetUpdate(event: WidgetUpdateEvent) {
         if (!event.isWidget(TabWidget.VISITORS)) return
 
-        val hasVisitorInfo = event.lines.any { VisitorApi.visitorCountPattern.matches(it) }
-        if (!hasVisitorInfo) return
+        if (event.isClear()) return
 
         val visitorsInTab = VisitorApi.visitorsInTabList(event.lines)
 
@@ -98,7 +99,7 @@ object VisitorListener {
         if (!VisitorApi.isVisitorInfo(lore)) return
 
         val offerItem = event.inventoryItems[ACCEPT_SLOT] ?: return
-        if (offerItem.hoverName.formattedTextCompatLeadingWhiteLessResets() != "§aAccept Offer") return
+        if (offerItem.hoverName.string != "Accept Offer") return
 
         VisitorApi.inInventory = true
 
@@ -117,13 +118,13 @@ object VisitorListener {
         VisitorOpenEvent(visitor).post()
     }
 
-    @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
+    @HandleEvent(InventoryCloseEvent::class)
+    fun onInventoryClose() {
         VisitorApi.inInventory = false
     }
 
-    @HandleEvent
-    fun onKeybind(event: GuiKeyPressEvent) {
+    @HandleEvent(GuiKeyPressEvent::class)
+    fun onKeybind() {
         if (!VisitorApi.inInventory) return
         if (!config.acceptHotkey.isKeyHeld()) return
         InventoryUtils.mouseClickSlot(29)
@@ -134,7 +135,8 @@ object VisitorListener {
         if (!GardenApi.onBarnPlot) return
         if (!VisitorApi.inInventory) return
         val visitor = VisitorApi.getVisitor(lastClickedNpc) ?: return
-        GardenVisitorFeatures.onTooltip(visitor, event.itemStack, event.toolTip)
+
+        GardenVisitorTooltip.onTooltip(visitor, event.itemStack, event.toolTip)
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
@@ -143,7 +145,7 @@ object VisitorListener {
         if (config.highlightStatus != VisitorConfig.HighlightMode.NAME && config.highlightStatus != VisitorConfig.HighlightMode.BOTH) return
 
         val entity = event.entity
-        if (entity.name.formattedTextCompatLessResets() == "§e§lCLICK") {
+        if (entity.name.string == "CLICK") {
             event.cancel()
         }
     }

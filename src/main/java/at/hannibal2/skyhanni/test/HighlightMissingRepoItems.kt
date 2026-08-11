@@ -1,6 +1,5 @@
 package at.hannibal2.skyhanni.test
 
-import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.events.GuiContainerEvent
@@ -19,7 +18,7 @@ object HighlightMissingRepoItems {
 
     @HandleEvent(priority = HandleEvent.LOWEST, onlyOnSkyblock = true)
     fun onBackgroundDrawn(event: GuiContainerEvent.BackgroundDrawnEvent) {
-        if (!SkyHanniMod.feature.dev.debug.highlightMissingRepo) return
+        if (!DevApi.config.debug.highlightMissingRepo) return
 
         val gui = event.gui
 
@@ -33,7 +32,7 @@ object HighlightMissingRepoItems {
     private fun highlightItems(slots: Iterable<Slot>) {
         if (NeuItems.allInternalNames.isEmpty()) return
         for (slot in slots) {
-            val internalName = slot.item?.getInternalNameOrNull() ?: continue
+            val internalName = slot.item.getInternalNameOrNull() ?: continue
             val asString = internalName.asString()
             if (asString.startsWith("BUILDER_")) continue // Skip builder items as we filter them out of allInternalNames
 

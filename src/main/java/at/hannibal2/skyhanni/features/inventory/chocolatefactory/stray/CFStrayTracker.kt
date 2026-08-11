@@ -17,12 +17,14 @@ import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ConditionalUtils.onToggle
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.InventoryUtils
-import at.hannibal2.skyhanni.utils.ItemUtils.getSingleLineLore
+import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.toSingleLineLore
 import at.hannibal2.skyhanni.utils.LorenzRarity
 import at.hannibal2.skyhanni.utils.NumberUtil.formatLong
 import at.hannibal2.skyhanni.utils.RegexUtils.groupOrNull
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeResets
@@ -34,12 +36,12 @@ import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.Searchable
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.renderables.toSearchable
+import at.hannibal2.skyhanni.utils.tracker.SessionUptime
 import at.hannibal2.skyhanni.utils.tracker.SkyHanniTracker
 import at.hannibal2.skyhanni.utils.tracker.TrackerData
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.annotations.Expose
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -139,7 +141,12 @@ object CFStrayTracker {
     )
     // </editor-fold>
 
-    private val tracker = SkyHanniTracker("Stray Tracker", ::Data, { it.chocolateFactory.strayTracker }) {
+    private val tracker = SkyHanniTracker(
+        "Stray Tracker",
+        ::Data,
+        { it.chocolateFactory.strayTracker },
+        trackerConfig = { config.strayTrackerConfig }
+    ) {
         drawDisplay(it)
     }
 
@@ -147,7 +154,7 @@ object CFStrayTracker {
         @Expose var straysCaught: MutableMap<LorenzRarity, Int> = mutableMapOf(),
         @Expose var straysExtraChocMs: MutableMap<LorenzRarity, Long> = mutableMapOf(),
         @Expose var goldenTypesCaught: MutableMap<String, Int> = mutableMapOf(),
-    ) : TrackerData()
+    ) : TrackerData<SessionUptime.Normal>(SessionUptime.Normal::class)
 
     private fun incrementRarity(rarity: LorenzRarity, chocAmount: Long = 0) {
         tracker.modify { it.straysCaught.addOrPut(rarity, 1) }
@@ -213,11 +220,11 @@ object CFStrayTracker {
         return if (goldenList.isEmpty()) "" else ("\n" + goldenList.joinToString("\n"))
     }
 
-    fun handleStrayClicked(slotNumber: Int, itemStack: ItemStack): Boolean {
+    fun handleStrayClicked(slotNumber: Int, itemStack: SafeItemStack): Boolean {
         if (!isEnabled() || claimedStraysSlots.contains(slotNumber)) return false
 
         claimedStraysSlots.add(slotNumber)
-        val loreLine = itemStack.getSingleLineLore()
+        val loreLine = itemStack.getLore().toSingleLineLore()
 
         // "Base" strays - Common -> Epic, raw choc only reward.
         strayLorePattern.matchMatcher(loreLine) {
@@ -347,10 +354,10 @@ object CFStrayTracker {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shresetstrayrabbittracker") {
+        event.registerBrigadier("shresetstrayrabbittracker") {
             description = "Resets the Stray Rabbit Tracker"
             category = CommandCategory.USERS_RESET
-            callback { tracker.resetCommand() }
+            simpleCallback { tracker.resetCommand() }
         }
     }
 

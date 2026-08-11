@@ -5,6 +5,7 @@ import at.hannibal2.skyhanni.data.GlobalRender
 import at.hannibal2.skyhanni.events.RenderEntityOutlineEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.utils.EntityUtils.hasVisibleEquipment
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.removeIfKey
 import at.hannibal2.skyhanni.utils.compat.deceased
 import net.minecraft.world.entity.Entity
@@ -18,51 +19,47 @@ object RenderLivingEntityHelper {
     private val entityColorMap = mutableMapOf<LivingEntity, Color>()
     private val entityColorCondition = ConcurrentHashMap<LivingEntity, () -> Boolean>()
 
-    private val entityNoHurtTimeCondition = mutableMapOf<LivingEntity, () -> Boolean>()
+    @JvmStatic
+    var isUsingCustomGlow = false
+        private set
+
+    private var currentGlowEvent: RenderEntityOutlineEvent? = null
+
+    private fun getEntityGlowEventColor(entity: Entity): Int? =
+        currentGlowEvent?.entitiesToOutline?.get(entity)?.rgb?.takeIf { it != 0 }
 
     @JvmStatic
-    var areMobsHighlighted = false
+    fun postNoXrayOutlineEvent() {
+        isUsingCustomGlow = entityColorCondition.values.any { it() } ||
+            currentGlowEvent?.entitiesToOutline.orEmpty().isNotEmpty()
 
-    @JvmStatic
-    var currentGlowEvent: RenderEntityOutlineEvent? = null
-
-    private fun isEntityInGlowEvent(entity: Entity): Int {
-        return currentGlowEvent?.entitiesToOutline?.get(entity)?.rgb ?: 0
-    }
-
-    @JvmStatic
-    fun check() {
-        areMobsHighlighted = entityColorCondition.values.any { it() } || currentGlowEvent?.entitiesToOutline?.isNotEmpty() == true
+        val event = RenderEntityOutlineEvent(NO_XRAY)
+        currentGlowEvent = event
+        event.post()
     }
 
     @JvmStatic
     fun getEntityGlowColor(entity: Entity): Int? {
-        val livingEntity = entity as? LivingEntity ?: return null
-        if (livingEntity.isInvisible) return null
-        val color = internalSetColorMultiplier(livingEntity, 0)
-        if (color == 0) {
-            val eventColor = isEntityInGlowEvent(entity)
-            if (eventColor == 0) {
-                return null
-            }
-            return eventColor
+        if (entity is LivingEntity) {
+            if (entity.isInvisible && !entity.hasVisibleEquipment()) return null
+            getLivingEntityGlowColor(entity)?.let { return it }
         }
-        return color
+        return getEntityGlowEventColor(entity)
     }
+
+    private fun getLivingEntityGlowColor(entity: LivingEntity): Int? =
+        internalSetColorMultiplier(entity, 0).takeIf { it != 0 }
 
     @HandleEvent
     fun onWorldChange() {
         entityColorMap.clear()
         entityColorCondition.clear()
-
-        entityNoHurtTimeCondition.clear()
     }
 
     @HandleEvent(SkyHanniTickEvent::class)
     fun onTick() {
         entityColorMap.removeIfKey { it.deceased }
         entityColorCondition.removeIfKey { it.deceased }
-        entityNoHurtTimeCondition.removeIfKey { it.deceased }
     }
 
     fun <T : LivingEntity> removeEntityColor(entity: T) {
@@ -76,24 +73,6 @@ object RenderLivingEntityHelper {
         entityColorCondition[entity] = condition
     }
 
-    private fun <T : LivingEntity> setEntityNoHurtTime(entity: T, condition: () -> Boolean) {
-        entityNoHurtTimeCondition[entity] = condition
-    }
-
-    fun <T : LivingEntity> setEntityColorWithNoHurtTime(entity: T, color: Color, condition: () -> Boolean) {
-        setEntityColor(entity, color, condition)
-        setEntityNoHurtTime(entity, condition)
-    }
-
-    fun <T : LivingEntity> removeNoHurtTime(entity: T) {
-        entityNoHurtTimeCondition.remove(entity)
-    }
-
-    fun <T : LivingEntity> removeCustomRender(entity: T) {
-        removeEntityColor(entity)
-        removeNoHurtTime(entity)
-    }
-
     @JvmStatic
     fun <T : LivingEntity> internalSetColorMultiplier(entity: T, default: Int): Int {
         if (GlobalRender.renderDisabled) return default
@@ -104,17 +83,5 @@ object RenderLivingEntityHelper {
             }
         }
         return default
-    }
-
-    @JvmStatic
-    fun <T : LivingEntity> internalChangeHurtTime(entity: T): Int {
-        if (GlobalRender.renderDisabled) return entity.hurtTime
-        run {
-            val condition = entityNoHurtTimeCondition[entity] ?: return@run
-            if (condition.invoke()) {
-                return 0
-            }
-        }
-        return entity.hurtTime
     }
 }

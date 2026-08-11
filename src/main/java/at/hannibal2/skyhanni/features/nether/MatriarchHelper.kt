@@ -5,11 +5,10 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.IslandGraphs
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.mob.Mob
-import at.hannibal2.skyhanni.data.model.GraphNode
+import at.hannibal2.skyhanni.data.model.graph.GraphNode
 import at.hannibal2.skyhanni.events.IslandGraphReloadEvent
 import at.hannibal2.skyhanni.events.MobEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
-import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.events.skyblock.GraphAreaChangeEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.CopyNearbyEntitiesCommand.getMobInfo
@@ -44,8 +43,8 @@ object MatriarchHelper {
     private var exitNode: GraphNode? = null
 
     @HandleEvent(onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onMobSpawn(event: MobEvent.Spawn.Special) {
-        if (!isHeavyPearl(event)) return
+    private fun onMobSpawn(event: MobEvent.Spawn.Special) {
+        if (!event.isHeavyPearl()) return
         val node = IslandGraphs.findClosestNode(event.mob.baseEntity.getLorenzVec().up(1.2), { true })
         if (node == null) {
             ErrorManager.logErrorStateWithData(
@@ -60,7 +59,7 @@ object MatriarchHelper {
         if (pearlList.size > 3) {
             ErrorManager.logErrorStateWithData(
                 "Something went wrong with the Heavy Pearl detection",
-                "More then 3 pearls",
+                "More than 3 pearls",
                 "pearList" to pearlList.map { getMobInfo(it.first) to it.second },
                 "mob" to getMobInfo(event.mob),
             )
@@ -68,11 +67,11 @@ object MatriarchHelper {
         }
     }
 
-    private fun isHeavyPearl(event: MobEvent) = isEnabled() && event.mob.name == "Heavy Pearl"
+    private fun MobEvent.isHeavyPearl() = isEnabled() && mob.name == "Heavy Pearl"
 
     @HandleEvent(onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onMobDespawn(event: MobEvent.DeSpawn.Special) {
-        if (!isHeavyPearl(event)) return
+    private fun onMobDespawn(event: MobEvent.DeSpawn.Special) {
+        if (!event.isHeavyPearl()) return
         pearlList.removeIf { it.first == event.mob }
     }
 
@@ -83,9 +82,9 @@ object MatriarchHelper {
 
     private fun accessPearls(): List<LorenzVec> {
         if (config.useShortestDistance) {
-            val path = tspCache ?: NavigationUtils.getRoute(
+            val path = tspCache ?: NavigationUtils.getRouteLocations(
                 pearlList.map { it.second },
-                maxIterations = 5,
+                maxIterations = 5
             ).also {
                 val pearls = path.size
                 if (pearls != lastTspPearls) {
@@ -100,7 +99,7 @@ object MatriarchHelper {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onTick(event: SkyHanniTickEvent) {
+    private fun onTick() {
         if (SkyBlockUtils.graphArea != AREA_NAME) return
         path.clear()
         path.addAll(accessPearls())
@@ -111,7 +110,7 @@ object MatriarchHelper {
     }
 
     @HandleEvent(GraphAreaChangeEvent::class, onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onGraphAreaChange() {
+    private fun onAreaChange() {
         if (SkyBlockUtils.graphArea != AREA_NAME) {
             tspCache = null
             lastTspPearls = 0
@@ -121,7 +120,7 @@ object MatriarchHelper {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CRIMSON_ISLE)
-    fun onRenderWorld(event: SkyHanniRenderWorldEvent) {
+    private fun onRenderWorld(event: SkyHanniRenderWorldEvent) {
         if (!isEnabled()) return
         if (config.highlight) {
             val color = config.highlightColor
@@ -148,7 +147,7 @@ object MatriarchHelper {
     }
 
     @HandleEvent(IslandGraphReloadEvent::class)
-    fun onIslandGraphReload() {
+    private fun onIslandGraphReload() {
         exitNode = null
     }
 

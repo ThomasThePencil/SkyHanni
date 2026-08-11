@@ -1,11 +1,13 @@
 package at.hannibal2.skyhanni.utils.compat
 
-import at.hannibal2.skyhanni.utils.LorenzVec
-import net.minecraft.world.item.ItemStack
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
-import net.minecraft.world.level.block.state.BlockState
 
+/**
+ * This is a compatibility layer that helps with multiple minecraft versions and mixins.
+ * This class should be used in utils/data/api classes and not in feature classes.
+ */
 object BlockCompat {
     fun getAllLogs(): List<Block> {
         val logs = mutableListOf<Block>()
@@ -15,8 +17,8 @@ object BlockCompat {
         return logs
     }
 
-    fun createSmoothDiorite(): ItemStack {
-        return ItemStack(Blocks.POLISHED_DIORITE)
+    fun createSmoothDiorite(): SafeItemStack {
+        return SafeItemStack(Blocks.POLISHED_DIORITE)
     }
 
     fun getAllLeaves(): List<Block> = buildList { addLeaves() }

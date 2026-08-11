@@ -3,7 +3,7 @@ package at.hannibal2.skyhanni.features.garden.farming
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
-import at.hannibal2.skyhanni.data.GardenCropMilestones.getCounter
+import at.hannibal2.skyhanni.data.garden.cropmilestones.CropMilestonesApi.getMilestoneCounter
 import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.garden.farming.CropClickEvent
 import at.hannibal2.skyhanni.events.garden.farming.CropMilestoneUpdateEvent
@@ -83,7 +83,7 @@ object CropSpeedMeter {
         if (!isEnabled()) return
         val counters = mutableMapOf<CropType, Long>()
         for (cropType in CropType.entries) {
-            counters[cropType] = cropType.getCounter()
+            counters[cropType] = cropType.getMilestoneCounter() ?: continue
         }
         if (startCrops.isEmpty()) {
             startCrops = counters
@@ -91,7 +91,7 @@ object CropSpeedMeter {
             snapshot = emptyList()
         } else {
             currentCrop?.let {
-                val crops = it.getCounter() - (startCrops[it] ?: 0L)
+                val crops = (it.getMilestoneCounter() ?: 0) - (startCrops[it] ?: 0L)
                 val blocks = currentBlocks
                 val cropsPerBlocks = (crops.toDouble() / blocks.toDouble()).roundTo(3)
 
@@ -119,7 +119,7 @@ object CropSpeedMeter {
     }
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!isEnabled()) return
 
         GardenApi.config.cropSpeedMeterPos.renderStrings(display, posLabel = "Crop Speed Meter")

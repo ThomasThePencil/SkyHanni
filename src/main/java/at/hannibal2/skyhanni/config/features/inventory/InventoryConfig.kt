@@ -1,8 +1,8 @@
 package at.hannibal2.skyhanni.config.features.inventory
 
 import at.hannibal2.skyhanni.config.FeatureToggle
-import at.hannibal2.skyhanni.config.OnlyModern
 import at.hannibal2.skyhanni.config.features.inventory.chocolatefactory.CFConfig
+import at.hannibal2.skyhanni.config.features.inventory.customloadout.CustomLoadoutConfig
 import at.hannibal2.skyhanni.config.features.inventory.customwardrobe.CustomWardrobeConfig
 import at.hannibal2.skyhanni.config.features.inventory.experimentationtable.ExperimentationTableConfig
 import at.hannibal2.skyhanni.config.features.inventory.helper.HelperConfig
@@ -17,6 +17,9 @@ import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 import io.github.notenoughupdates.moulconfig.annotations.SearchTag
+
+private const val EVOLVING_ITEMS_SEARCH_TAG =
+    "Time Pocket, Bottle of Jyrre, Dark Cacao Truffle, Discrite, Moby-Duck, Rosewater Flask"
 
 class InventoryConfig {
     @Expose
@@ -52,12 +55,17 @@ class InventoryConfig {
     val customWardrobe: CustomWardrobeConfig = CustomWardrobeConfig()
 
     @Expose
+    @Category(name = "Custom Loadout", desc = "New Loadout menu look.")
+    val customLoadout: CustomLoadoutConfig = CustomLoadoutConfig()
+
+    @Expose
     @Category(name = "Chocolate Factory", desc = "Features to help you master the Chocolate Factory idle game.")
     val chocolateFactory: CFConfig = CFConfig()
 
     @Expose
-    @ConfigOption(name = "Improved SB Menus", desc = "")
+    @ConfigOption(name = "Improved SkyBlock Menus", desc = "")
     @Accordion
+    @SearchTag("better container sb")
     val improvedSBMenus: ImprovedSBMenusConfig = ImprovedSBMenusConfig()
 
     @Expose
@@ -89,6 +97,11 @@ class InventoryConfig {
     @ConfigOption(name = "RNG Meter", desc = "")
     @Accordion
     val rngMeter: RngMeterConfig = RngMeterConfig()
+
+    @Expose
+    @ConfigOption(name = "Super Crafting", desc = "")
+    @Accordion
+    val superCrafting: SuperCraftingConfig = SuperCraftingConfig()
 
     @Expose
     @ConfigOption(name = "Stats Tuning", desc = "")
@@ -166,7 +179,7 @@ class InventoryConfig {
     @Expose
     @ConfigOption(name = "Evolving Items", desc = "")
     @Accordion
-    @SearchTag("Time Pocket, Bottle of Jyrre, Dark Cacao Truffle, Discrite, Moby-Duck")
+    @SearchTag(EVOLVING_ITEMS_SEARCH_TAG)
     val evolvingItems: EvolvingItemsConfig = EvolvingItemsConfig()
 
     @Expose
@@ -175,9 +188,9 @@ class InventoryConfig {
     val trade: TradeConfig = TradeConfig()
 
     @Expose
-    @ConfigOption(name = "Item Number", desc = "Showing the item number as a stack size for these items.")
+    @ConfigOption(name = "Item Number", desc = "Show the item number as a stack size for these items.")
     @ConfigEditorDraggableList
-    @SearchTag("Time Pocket, Bottle of Jyrre, Dark Cacao Truffle, Discrite, Moby-Duck")
+    @SearchTag(EVOLVING_ITEMS_SEARCH_TAG)
     val itemNumberAsStackSize: MutableList<ItemNumberEntry> = mutableListOf(
         ItemNumberEntry.NEW_YEAR_CAKE,
         ItemNumberEntry.RANCHERS_BOOTS_SPEED,
@@ -224,9 +237,10 @@ class InventoryConfig {
     @Expose
     @ConfigOption(
         name = "Quick Craft Confirmation",
-        desc = "Require Ctrl+Click to craft items that aren't often quick crafted " +
-            "(e.g. armor, weapons, accessories). Sack items can be crafted normally.",
+        desc = "Require Ctrl+Click (Cmd+Click on macOS) to craft items that aren't often quick " +
+            "crafted (e.g. armor, weapons, accessories). Sack items can be crafted normally.",
     )
+    @SearchTag("command control")
     @ConfigEditorBoolean
     @FeatureToggle
     var quickCraftingConfirmation: Boolean = false
@@ -321,6 +335,13 @@ class InventoryConfig {
     var ministerInCalendar: Boolean = true
 
     @Expose
+    @ConfigOption(name = "Oringo Pet in Calendar", desc = "Show the future legendary pet Oringo will offer in the Calendar.")
+    @ConfigEditorBoolean
+    @FeatureToggle
+    @SearchTag("traveling zoo")
+    var oringoPetInCalendar: Boolean = true
+
+    @Expose
     @ConfigOption(name = "Show hex as actual color", desc = "Changes the color of hex codes to the actual color.")
     @ConfigEditorBoolean
     @FeatureToggle
@@ -336,7 +357,7 @@ class InventoryConfig {
     var essenceShopHelper: Boolean = true
 
     @Expose
-    @ConfigOption(name = "Snake Game Keybinds", desc = "Use WASD-Keys to move around in the Abiphone snake game.")
+    @ConfigOption(name = "Snake Game Keybinds", desc = "Use WASD-Keys to move around in the Abiphone/PlantBoy Advance snake game.")
     @ConfigEditorBoolean
     @FeatureToggle
     var snakeGameKeybinds: Boolean = true
@@ -368,6 +389,14 @@ class InventoryConfig {
     @ConfigEditorBoolean
     @FeatureToggle
     @SearchTag("pick block")
-    @OnlyModern
     var middleClickFix: Boolean = true
+
+    @Expose
+    @ConfigOption(
+        name = "Museum Category Highlighter",
+        desc = "Highlights completed museum categories in green.",
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var museumCategoryHighlight: Boolean = true
 }

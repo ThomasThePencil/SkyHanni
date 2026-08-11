@@ -6,7 +6,6 @@ import at.hannibal2.skyhanni.config.features.event.AnniversaryTeamFinderColorCon
 import at.hannibal2.skyhanni.data.hypixel.chat.event.SystemMessageEvent
 import at.hannibal2.skyhanni.data.mob.Mob
 import at.hannibal2.skyhanni.data.mob.MobData
-import at.hannibal2.skyhanni.events.ConfigLoadEvent
 import at.hannibal2.skyhanni.events.ItemInHandChangeEvent
 import at.hannibal2.skyhanni.events.MobEvent
 import at.hannibal2.skyhanni.events.entity.EntityClickEvent
@@ -21,7 +20,6 @@ import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompat
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import io.github.notenoughupdates.moulconfig.ChromaColour
@@ -80,7 +78,7 @@ object Year400Features {
     }
 
     @HandleEvent
-    fun onConfigLoad(event: ConfigLoadEvent) {
+    fun onConfigLoad() {
         with(config.colors) {
             ConditionalUtils.onToggle(wrong, pink, blue, yellow, green, red) {
                 colorInHand?.let {
@@ -168,9 +166,9 @@ object Year400Features {
     }
 
     @HandleEvent
-    fun onSystemMessage(event: SystemMessageEvent) {
+    fun onSystemMessage(event: SystemMessageEvent.Allow) {
         if (!config.teamFinder) return
-        if (!fatPlayerMessagePattern.matches(event.message.removeColor())) return
+        if (!fatPlayerMessagePattern.matches(event.cleanMessage)) return
         if (lastClickedPlayerTime.passedSince() >= 500.milliseconds) return
 
         val lastPlayer = lastClickedPlayer ?: return

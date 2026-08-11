@@ -19,10 +19,9 @@ import at.hannibal2.skyhanni.utils.EntityUtils.isNpc
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.MobUtils.mob
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLessResets
 import net.minecraft.client.player.RemotePlayer
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.animal.IronGolem
+import net.minecraft.world.entity.animal.golem.IronGolem
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.monster.Ghast
@@ -57,7 +56,7 @@ object HideFarEntities {
 
     /**
      * TODO mobs to add to never hide list
-     * golden/diamond golbins (mining islands)
+     * Golden/Diamond Goblins (mining islands)
      * beach ball (great and normal, from year of the seal)
      * worms/scatha in dwarven mines
      * dungeon wither+blood key
@@ -88,10 +87,10 @@ object HideFarEntities {
             // other party members
             list += allEntities.filter { it is RemotePlayer && !it.isNpc() }
         }
-        if (IslandType.WINTER.isCurrent()) {
+        if (IslandType.WINTER.isInIsland()) {
             list += allEntities.filter { it is MagmaCube }
         }
-        if (IslandType.DWARVEN_MINES.isCurrent()) {
+        if (IslandType.DWARVEN_MINES.isInIsland()) {
             // powder ghast & golem defender (from goblin raid event)
             list += allEntities.filter { it is Ghast || it is IronGolem }
         }
@@ -99,7 +98,7 @@ object HideFarEntities {
         // Always show boss bar
         list += allEntities.filter { it is WitherBoss && it.id < 0 }
 
-        list += allEntities.filter { it is RemotePlayer && it.name.formattedTextCompatLessResets() in PartyApi.partyMembers }
+        list += allEntities.filter { it is RemotePlayer && it.name.string in PartyApi.partyMembers }
         list += DamageIndicatorManager.getAllMobs()
         list += AreaMiniBossFeatures.currentMobs.map { it.baseEntity }
 

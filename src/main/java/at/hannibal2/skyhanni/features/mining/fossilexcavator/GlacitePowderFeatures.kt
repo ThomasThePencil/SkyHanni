@@ -25,11 +25,11 @@ object GlacitePowderFeatures {
     fun onRenderItemTip(event: RenderItemTipEvent) {
         if (!isEnabled()) return
 
-        glacitePowderPattern.matchMatcher(event.stack.cleanName()) {
+        glacitePowderPattern.matchMatcher(event.stack.cleanName) {
             val powder = group("amount").formatLong()
             event.stackTip = "§b${powder.shortFormat()}"
         }
     }
 
-    fun isEnabled() = FossilExcavatorApi.inInventory && config.glacitePowderStack
+    fun isEnabled() = FossilExcavatorApi.excavatorInventory.isInside() && config.glacitePowderStack
 }

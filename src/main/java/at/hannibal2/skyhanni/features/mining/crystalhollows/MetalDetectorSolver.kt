@@ -9,7 +9,6 @@ import at.hannibal2.skyhanni.events.ActionBarUpdateEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
-import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.events.minecraft.WorldChangeEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.BlockUtils.getBlockAt
@@ -23,17 +22,22 @@ import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzColor
 import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
+import at.hannibal2.skyhanni.utils.NumberUtil.formatDoubleOrNull
 import at.hannibal2.skyhanni.utils.NumberUtil.roundTo
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SoundUtils
 import at.hannibal2.skyhanni.utils.SoundUtils.playSound
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
+import at.hannibal2.skyhanni.utils.compat.withColor
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawColor
-import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawLineToEye
+import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawLineToCrosshair
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawString
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawWaypointFilled
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.ChatFormatting
 import net.minecraft.world.level.block.Blocks
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -107,7 +111,7 @@ object MetalDetectorSolver {
         }
 
         metalDetectorDistancePattern.matchMatcher(event.actionBar) {
-            val distance = group("distance").toDoubleOrNull() ?: return
+            val distance = group("distance").formatDoubleOrNull() ?: return
 
             if (baseCoordinates == null) findBaseCoordinates()
             val baseCoordinatesNonNull = baseCoordinates ?: return
@@ -121,7 +125,7 @@ object MetalDetectorSolver {
                     return
                 }
                 if (loc.add(0, 1, 0).distanceToPlayer().roundTo(1) == distance) {
-                    if (predictedChestLocations.size == 0 && !playedPling) {
+                    if (predictedChestLocations.isEmpty() && !playedPling) {
                         SoundUtils.plingSound.playSound()
                         playedPling = true
                     }
@@ -140,7 +144,7 @@ object MetalDetectorSolver {
                 if (lastTreasureFound.passedSince() < 500.milliseconds) return
             }
 
-            if (predictedChestLocations.size == 0) {
+            if (predictedChestLocations.isEmpty()) {
                 ChatUtils.chat(
                     "No chests found. Try standing still with the metal detector in a different spot.",
                     replaceSameMessage = true,
@@ -156,7 +160,7 @@ object MetalDetectorSolver {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CRYSTAL_HOLLOWS)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
         if (!treasureFoundPattern.matches(event.message)) return
 
@@ -167,7 +171,12 @@ object MetalDetectorSolver {
         if (config.showTimeTaken && !lastTreasureFound.isFarPast()) {
             DelayedRun.runNextTick {
                 ChatUtils.chat(
-                    "§aYou found the treasure in §e${timeTaken.inWholeSeconds}§a seconds.",
+                    componentBuilder {
+                        withColor(ChatFormatting.GREEN)
+                        append("You found the treasure in ")
+                        appendWithColor("${timeTaken.inWholeSeconds}", ChatFormatting.YELLOW)
+                        append(" seconds.")
+                    }
                 )
             }
         }
@@ -181,7 +190,7 @@ object MetalDetectorSolver {
         predictedChestLocations.forEach {
             // TODO add chroma color support via config
             event.drawColor(it, LorenzColor.GOLD.toChromaColor())
-            event.drawLineToEye(it.add(0.5, 0.5, 0.5), LorenzColor.WHITE.toChromaColor(), 3, false)
+            event.drawLineToCrosshair(it.add(0.5, 0.5, 0.5), LorenzColor.WHITE.toChromaColor(), 3, false)
             event.drawWaypointFilled(it, LorenzColor.RED.toColor(), seeThroughBlocks = true, beacon = true)
             event.drawString(it, "Treasure: §e${it.distanceToPlayer().roundTo(1)}m", true)
         }
@@ -199,7 +208,7 @@ object MetalDetectorSolver {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CRYSTAL_HOLLOWS)
-    fun onTick(event: SkyHanniTickEvent) {
+    fun onTick() {
         if (!isEnabled()) return
         if (predictedChestLocations.size == 1) {
             val distanceSq = predictedChestLocations[0].distanceSqToPlayer()

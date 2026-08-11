@@ -53,7 +53,7 @@ object ArachneChatMessageHider {
     )
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
         if (!shouldHide(event.message)) return
 
@@ -88,5 +88,5 @@ object ArachneChatMessageHider {
         return hideArachneDeadMessage
     }
 
-    fun isEnabled() = IslandType.SPIDER_DEN.isCurrent() && config.hideArachneMessages
+    fun isEnabled() = IslandType.SPIDER_DEN.isInIsland() && config.hideArachneMessages
 }

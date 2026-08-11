@@ -20,6 +20,7 @@ import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SimpleTimeMark.Companion.fromNow
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.TimeUtils.format
+import at.hannibal2.skyhanni.utils.chat.TextHelper
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addNotNull
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addHorizontalSpacer
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addItemStack
@@ -29,6 +30,7 @@ import at.hannibal2.skyhanni.utils.renderables.addLine
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
 import at.hannibal2.skyhanni.utils.renderables.container.VerticalContainerRenderable.Companion.vertical
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
+import net.minecraft.network.chat.Component
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -48,21 +50,21 @@ object ComposterDisplay {
     private var tabListData by ComposterApi::tabListData
 
     enum class DataType(rawPattern: String, val icon: String) {
-        ORGANIC_MATTER(" Organic Matter: §r(.*)", "WHEAT"),
-        FUEL(" Fuel: §r(.*)", "OIL_BARREL"),
-        TIME_LEFT(" Time Left: §r(.*)", "WATCH"),
-        STORED_COMPOST(" Stored Compost: §r(.*)", "COMPOST");
+        ORGANIC_MATTER(" Organic Matter: (.*)", "WHEAT"),
+        FUEL(" Fuel: (.*)", "OIL_BARREL"),
+        TIME_LEFT(" Time Left: (.*)", "WATCH"),
+        STORED_COMPOST(" Stored Compost: (.*)", "COMPOST");
 
         val displayItem by AutoUpdatingItemStack(icon)
 
         val pattern = rawPattern.toPattern()
 
-        fun label(label: String) = Renderable.horizontal {
+        fun label(label: Component) = Renderable.horizontal {
             addItemStack(displayItem)
-            addString(label)
+            add(Renderable.text(label))
         }
 
-        fun labeledWithData(map: Map<DataType, String>): Renderable? {
+        fun labeledWithData(map: Map<DataType, Component>): Renderable? {
             return map[this]?.let { label(it) }
         }
     }
@@ -71,7 +73,20 @@ object ComposterDisplay {
     fun onWidgetUpdate(event: WidgetUpdateEvent) {
         if (!event.isWidget(TabWidget.COMPOSTER)) return
 
-        readData(event.lines)
+        val newData = mutableMapOf<DataType, Component>()
+
+        for (line in event.lines) {
+            if (line.string != "Composter:") {
+                if (line.string == "") break
+                loop@ for (type in DataType.entries) {
+                    type.pattern.matchMatcher(line) {
+                        newData[type] = TextHelper.matcher(line, group(1)) ?: continue@loop
+                    }
+                }
+            }
+        }
+
+        tabListData = newData
 
         if (tabListData.isNotEmpty()) {
             composterEmptyTime = ComposterApi.estimateEmptyTimeFromTab()
@@ -106,28 +121,6 @@ object ComposterDisplay {
         } else Renderable.text("§cOpen Composter Upgrades!")
     }
 
-    private fun readData(tabList: List<String>) {
-        var next = false
-        val newData = mutableMapOf<DataType, String>()
-
-        for (line in tabList) {
-            if (line == "§b§lComposter:") {
-                next = true
-                continue
-            }
-            if (next) {
-                if (line == "") break
-                for (type in DataType.entries) {
-                    type.pattern.matchMatcher(line) {
-                        newData[type] = group(1)
-                    }
-                }
-            }
-        }
-
-        tabListData = newData
-    }
-
     private fun sendNotify() {
         if (!config.notifyLow.enabled) return
         if (ReminderUtils.isBusy()) return
@@ -151,13 +144,15 @@ object ComposterDisplay {
         }
     }
 
-    @HandleEvent(GuiRenderEvent.GuiOverlayRenderEvent::class)
-    fun onRenderOverlay() {
-        @Suppress("InSkyBlockEarlyReturn")
-        if (!SkyBlockUtils.inSkyBlock && !OutsideSBFeature.COMPOSTER_TIME.isSelected()) return
-
+    @HandleEvent(
+        GuiRenderEvent.GuiOverlayRenderEvent::class,
+        onlyOnSkyblockOrFeatures = [OutsideSBFeature.COMPOSTER_TIME],
+    )
+    fun onGuiRenderOverlay() {
         if (GardenApi.inGarden() && config.displayEnabled) {
-            config.displayPos.renderRenderable(display, posLabel = "Composter Display")
+            display?.let {
+                config.displayPos.renderRenderable(it, posLabel = "Composter Display")
+            }
         }
 
         checkWarningsAndOutsideGarden()
@@ -179,15 +174,12 @@ object ComposterDisplay {
             } else "?"
         } ?: "§cJoin SkyBlock to show composter timer."
 
-        val inSB = SkyBlockUtils.inSkyBlock && config.displayOutsideGarden
-        val outsideSB = !SkyBlockUtils.inSkyBlock && OutsideSBFeature.COMPOSTER_TIME.isSelected()
-        if (!GardenApi.inGarden() && (inSB || outsideSB)) {
-            val outsideGardenDisplay = Renderable.horizontal {
-                addItemStack(bucket)
-                addString("§b$format")
-            }
-            config.outsideGardenPos.renderRenderable(outsideGardenDisplay, posLabel = "Composter Outside Garden")
+        if (GardenApi.inGarden() || SkyBlockUtils.inSkyBlock && !config.displayOutsideGarden) return
+        val outsideGardenDisplay = Renderable.horizontal {
+            addItemStack(bucket)
+            addString("§b$format")
         }
+        config.outsideGardenPos.renderRenderable(outsideGardenDisplay, posLabel = "Composter Outside Garden")
     }
 
     private fun warn(warningMessage: String) {
@@ -198,7 +190,7 @@ object ComposterDisplay {
 
         if (storage.lastComposterEmptyWarningTime.passedSince() < 2.0.minutes) return
         storage.lastComposterEmptyWarningTime = SimpleTimeMark.now()
-        if (IslandType.GARDEN.isCurrent()) {
+        if (IslandType.GARDEN.isInIsland()) {
             ChatUtils.chat(warningMessage, replaceSameMessage = true)
         } else {
             ChatUtils.clickToActionOrDisable(

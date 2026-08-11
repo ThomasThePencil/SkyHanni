@@ -1,9 +1,11 @@
 package at.hannibal2.skyhanni.features.gui.customscoreboard
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.data.model.SkyblockStat
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import java.util.regex.Pattern
 
 @SkyHanniModule
 object ScoreboardPattern {
@@ -12,10 +14,13 @@ object ScoreboardPattern {
     // Lines from the scoreboard
     private val scoreboardGroup by group.exclusiveGroup("scoreboard")
 
-    @HandleEvent
-    fun onRepoReload(event: RepositoryReloadEvent) {
-        UnknownLinesHandler.remoteOnlyPatterns = scoreboardGroup.getUnusedPatterns().toTypedArray()
+    @HandleEvent(RepositoryReloadEvent::class)
+    fun onRepoReload() {
+        UnknownLinesHandler.invalidateRemoteOnlyPatterns()
     }
+
+    internal fun computeRemoteOnlyPatterns(): Array<Pattern> =
+        scoreboardGroup.getUnusedPatterns().toTypedArray()
 
     // Main scoreboard
     private val mainSB = scoreboardGroup.group("main")
@@ -66,11 +71,11 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  §5ф §dWizard Tower
+     * WRAPPED-REGEX-TEST: " §5ф §dWizard Tower"
      */
     val locationPattern by mainSB.pattern(
         "location",
-        "\\s*(?<location>(?:§7⏣|§5ф) .*)",
+        "\\s*(?<location>§.. .*)",
     )
 
     /**
@@ -82,7 +87,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  Early Spring 13th
+     * WRAPPED-REGEX-TEST: " Early Spring 13th"
      */
     val datePattern by mainSB.pattern(
         "date",
@@ -90,8 +95,8 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  §78:50am
-     * REGEX-TEST:  §75:50am §b☽
+     * WRAPPED-REGEX-TEST: " §78:50am"
+     * WRAPPED-REGEX-TEST: " §75:50am §b☽"
      */
     val timePattern by mainSB.pattern(
         "time",
@@ -136,15 +141,15 @@ object ScoreboardPattern {
     /**
      * REGEX-TEST: North Stars: §d1,539
      */
-    val northstarsPattern by mainSB.pattern(
+    val northStarsPattern by mainSB.pattern(
         "northstars",
         "North Stars: §d(?<northstars>[\\w,]+).*",
     )
 
     /**
-     * REGEX-TEST:  §7♲ §7Ironman
-     * REGEX-TEST:  §a☀ §aStranded
-     * REGEX-TEST:  §9Ⓑ §9Bingo
+     * WRAPPED-REGEX-TEST: " §7♲ §7Ironman"
+     * WRAPPED-REGEX-TEST: " §a☀ §aStranded"
+     * WRAPPED-REGEX-TEST: " §9Ⓑ §9Bingo"
      */
     val profileTypePattern by mainSB.pattern(
         "profiletype",
@@ -198,12 +203,12 @@ object ScoreboardPattern {
     private val dungeonSB = scoreboardGroup.group("dungeon")
 
     /**
-     * REGEX-TEST: §8- §c§4Power Dragon§a 497.3M§c❤
+     * REGEX-TEST: §8- §c§4Power Dragon§a 497.3M§c
      * REGEX-TEST: §8- §c§4Power Dragon§a 497.3M
      */
     val m7dragonsPattern by dungeonSB.pattern(
         "m7dragons",
-        "§cNo Alive Dragons|§8- (?:§.)+[\\w\\s]+Dragon§a [\\w,.]+(?:§.❤)?",
+        "§cNo Alive Dragons|§8- (?:§.)+[\\w\\s]+Dragon§a [\\w,.]+(?:§.${SkyblockStat.HEALTH.hypixelIcon})?",
     )
     val keysPattern by dungeonSB.pattern(
         "keys",
@@ -233,7 +238,7 @@ object ScoreboardPattern {
      */
     val floor3GuardiansPattern by dungeonSB.pattern(
         "floor3guardians",
-        "§. - §.(?:Healthy|Reinforced|Laser|Chaos)§a [\\w,.]*(?:§c❤)?",
+        "§. - §.(?:Healthy|Reinforced|Laser|Chaos)§a [\\w,.]*(?:§c${SkyblockStat.HEALTH.hypixelIcon})?",
     )
 
     // kuudra
@@ -278,7 +283,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:    §cLocked
+     * WRAPPED-REGEX-TEST: "   §cLocked"
      */
     val lockedPattern by farmingSB.pattern(
         "locked",
@@ -286,8 +291,8 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:    §fCleanup§7: §e0.3%
-     * REGEX-TEST:    §fCleanup§7: §b2 §4§lൠ§7 x1
+     * WRAPPED-REGEX-TEST: "   §fCleanup§7: §e0.3%"
+     * WRAPPED-REGEX-TEST: "   §fCleanup§7: §b2 §4§l§7 x1"
      */
     val cleanUpPattern by farmingSB.pattern(
         "cleanup",
@@ -295,8 +300,8 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:    §fPasting§7: §e41.9%
-     * REGEX-TEST:    §fBarn Pasting§7: §e10.2%
+     * WRAPPED-REGEX-TEST: "   §fPasting§7: §e41.9%"
+     * WRAPPED-REGEX-TEST: "   §fBarn Pasting§7: §e10.2%"
      */
     val pastingPattern by farmingSB.pattern(
         "pasting",
@@ -324,7 +329,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:    §aPlot §7- §b3 §4§lൠ§7 x8
+     * WRAPPED-REGEX-TEST: "   §aPlot §7- §b3 §4§l§7 x8"
      */
     val plotPattern by farmingSB.pattern(
         "plot",
@@ -353,7 +358,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:   ≈
+     * WRAPPED-REGEX-TEST: "  ≈"
      */
     val windCompassArrowPattern by miningSB.pattern(
         "windcompassarrow",
@@ -466,11 +471,11 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST: Event Bonus: §6+4☘
+     * REGEX-TEST: Event Bonus: §6+4
      */
     val fortunateFreezingBonusPattern by miningSB.pattern(
         "fortunatefreezing.bonus",
-        "Event Bonus: §6\\+\\d+☘",
+        "Event Bonus: §6\\+\\d+${SkyblockStat.MINING_FORTUNE.hypixelIcon}",
     )
 
     /**
@@ -528,20 +533,20 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST: §e389.6k§f/§a10M§c❤
+     * REGEX-TEST: §e389.6k§f/§a10M§c
      */
     val bossHealthBarPattern by combatSB.pattern(
         "magmabosshealthbar",
-        "§.[\\w,.]+§f/§a10M§c❤",
+        "§.[\\w,.]+§f/§a10M§c${SkyblockStat.HEALTH.hypixelIcon}",
     )
 
     /**
-     * REGEX-TEST: Dragon HP: §a2,317,156 §c❤
-     * REGEX-TEST: Dragon HP: §a8,612,684 §c❤
+     * REGEX-TEST: Dragon HP: §a2,317,156 §c
+     * REGEX-TEST: Dragon HP: §a8,612,684 §c
      */
     val bossHPPattern by combatSB.pattern(
         "bosshp",
-        "(?:Protector|Dragon) HP: §a[\\d,.]* §c❤",
+        "(?:Protector|Dragon) HP: §a[\\d,.]* §c${SkyblockStat.HEALTH.hypixelIcon}",
     )
 
     /**
@@ -569,7 +574,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  §e§l⚡ §cRedstone: §e§b4%
+     * WRAPPED-REGEX-TEST: " §e§l⚡ §cRedstone: §e§b4%"
      */
     val redstonePattern by miscSB.pattern(
         "redstone",
@@ -577,7 +582,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  §a✌ §7(§a9§7/20)
+     * WRAPPED-REGEX-TEST: " §a✌ §7(§a9§7/20)"
      */
     val visitingPattern by miscSB.pattern(
         "visiting",
@@ -586,6 +591,7 @@ object ScoreboardPattern {
 
     /**
      * REGEX-TEST: Flight Duration: §a202:46:12
+     * REGEX-TEST: Flight Duration: §a2:09:29
      */
     val flightDurationPattern by miscSB.pattern(
         "flightduration",
@@ -678,7 +684,7 @@ object ScoreboardPattern {
      * REGEX-TEST: §eProtect Elle §7(§a98%§7)
      * REGEX-TEST: §fFish 1 Flyfish §c✖
      * REGEX-TEST: §fFish 1 Skeleton Fish §c✖
-     * REGEX-TEST:   §7(§e1§7/§a100§7)
+     * WRAPPED-REGEX-TEST: "  §7(§e1§7/§a100§7)"
      */
     @Suppress("MaxLineLength")
     val thirdObjectiveLinePattern by miscSB.pattern(
@@ -694,7 +700,7 @@ object ScoreboardPattern {
      * REGEX-TEST: §eFind the 4 Missing Pieces
      * REGEX-TEST: §eTalk to the Goblin King
      * REGEX-TEST: §eBring items to Moby
-     * REGEX-TEST:  Glowing Mushroom §8x8
+     * WRAPPED-REGEX-TEST: " Glowing Mushroom §8x8"
      */
     @Suppress("MaxLineLength")
     val wtfAreThoseLinesPattern by miscSB.pattern(
@@ -786,13 +792,13 @@ object ScoreboardPattern {
     private val riftSB = scoreboardGroup.group("rift")
 
     /**
-     * REGEX-TEST:  §fRift Dimension
+     * WRAPPED-REGEX-TEST: " §fRift Dimension"
      */
     val riftDimensionPattern by riftSB.pattern(
         "dimension",
         "\\s*(?:§f)?Rift Dimension",
     )
-    val riftHotdogTitlePattern by riftSB.pattern(
+    val riftHotDogTitlePattern by riftSB.pattern(
         "hotdogtitle",
         "§6Hot Dog Contest",
     )
@@ -800,7 +806,7 @@ object ScoreboardPattern {
     /**
      * REGEX-TEST: Eaten: §c2/50
      */
-    val riftHotdogEatenPattern by riftSB.pattern(
+    val riftHotDogEatenPattern by riftSB.pattern(
         "hotdogeaten",
         "Eaten: §.\\d+/\\d+",
     )
@@ -853,7 +859,7 @@ object ScoreboardPattern {
     )
 
     /**
-     * REGEX-TEST:  Big damage in: §d2m 59s
+     * WRAPPED-REGEX-TEST: " Big damage in: §d2m 59s"
      */
     val bigDamagePattern by riftSB.pattern(
         "bigdamage",
@@ -864,10 +870,11 @@ object ScoreboardPattern {
 
     /**
      * REGEX-TEST: §eCarnival§f 85:33:57
+     * REGEX-TEST: §eCarnival§f 118:41:05
      */
     val carnivalPattern by carnivalSB.pattern(
         "carnival",
-        "§eCarnival§f (?:\\d+:?)*",
+        "§eCarnival§f \\d+(?::\\d+)*",
     )
 
     /**
@@ -938,15 +945,16 @@ object ScoreboardPattern {
      * REGEX-TEST: Whispers: §3141§b (+1)
      * REGEX-TEST: Whispers: §317.5k§b (+50)
      * REGEX-TEST: §fWhispers: §317k§b (+40)
+     * REGEX-TEST: §fWhispers: §64.2k§b (+44)
      */
     val whispersPattern by galateaSB.pattern(
         "whispers",
-        "(?:§f)?Whispers: §3[\\w,.]+.*",
+        "(?:§f)?Whispers: §[36][\\w,.]+.*",
     )
 
     /**
-     * REGEX-TEST:     §aHOTF§f: §a28k§3.7k§b (+35)
-     * REGEX-TEST:     §aHOTF§f: §a28k§9 (+29 Exp)
+     * WRAPPED-REGEX-TEST: "    §aHOTF§f: §a28k§3.7k§b (+35)"
+     * WRAPPED-REGEX-TEST: "    §aHOTF§f: §a28k§9 (+29 Exp)"
      */
     val hotfPattern by galateaSB.pattern(
         "hotf",
@@ -962,14 +970,34 @@ object ScoreboardPattern {
     )
 
     /**
+     * REGEX-TEST: §eMiria's Contest §a0m35s
+     */
+    val miriasContestPattern by galateaSB.pattern(
+        "mirias-contest",
+        "§eMiria's Contest §a.*",
+    )
+
+    // Safari
+    private val safariSB = scoreboardGroup.group("safari")
+
+    /**
+     * REGEX-TEST: Captured Mobs: §e0
+     * REGEX-TEST: Captured Mobs: §e14
+     */
+    val capturedMobsPattern by safariSB.pattern(
+        "captured-mobs",
+        "Captured Mobs: §e(?<capturedMobs>\\d+)",
+    )
+
+    /**
      * Sometimes when the scoreboard updates, it only updates half way,
      * causing some lines to become mixed with other lines -> broken.
      * This should already get handled fine but sometimes these errors still occur with some lines way too often.
      * This pattern is to catch those lines.
      */
     /**
-     * REGEX-TEST:  §e§l⚡ §cRedston
-     * REGEX-TEST:       §ce: §e§b0%
+     * WRAPPED-REGEX-TEST: " §e§l⚡ §cRedston"
+     * WRAPPED-REGEX-TEST: "      §ce: §e§b0%"
      * REGEX-TEST: Starting in: §a0 §c1:55
      * REGEX-TEST: §2᠅ §fMithril§f:§695
      * REGEX-TEST: §d᠅ §fGemstone§f
@@ -984,21 +1012,21 @@ object ScoreboardPattern {
     )
 
     // Lines from the tablist
-    private val tablistGroup = group.group("tablist")
+    private val tablistGroup = group.group("tablist-no-color")
 
     /**
-     * REGEX-TEST:  Ends In: §r§e27h
+     * WRAPPED-REGEX-TEST: " Ends In: 27h"
      */
     val eventTimeEndsPattern by tablistGroup.pattern(
         "eventtime",
-        "\\s+Ends In: §r§e(?<time>.*)",
+        "\\s+Ends In: (?<time>.*)",
     )
 
     /**
-     * REGEX-TEST:  Starts In: §r§e7h
+     * WRAPPED-REGEX-TEST: " Starts In: 7h"
      */
     val eventTimeStartsPattern by tablistGroup.pattern(
         "eventtimestarts",
-        "\\s+Starts In: §r§e(?<time>.*)",
+        "\\s+Starts In: (?<time>.*)",
     )
 }

@@ -9,13 +9,14 @@ import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.ProfileJoinEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
-import at.hannibal2.skyhanni.events.minecraft.ToolTipEvent
+import at.hannibal2.skyhanni.events.minecraft.ToolTipTextEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ConditionalUtils
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
 import at.hannibal2.skyhanni.utils.NumberUtil.formatLong
@@ -25,13 +26,15 @@ import at.hannibal2.skyhanni.utils.NumberUtil.toRoman
 import at.hannibal2.skyhanni.utils.RegexUtils.groupOrNull
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
-import at.hannibal2.skyhanni.utils.RenderUtils.renderString
+import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderable
 import at.hannibal2.skyhanni.utils.StringUtils
 import at.hannibal2.skyhanni.utils.StringUtils.isRoman
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
+import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.compat.setCustomItemName
+import at.hannibal2.skyhanni.utils.renderables.Renderable
+import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.network.chat.Component
 import kotlin.time.Duration.Companion.milliseconds
 
 @SkyHanniModule
@@ -46,6 +49,7 @@ object GardenLevelDisplay {
 
     private val patternGroup = RepoPattern.group("garden.level")
 
+    // <editor-fold desc="Patterns">
     /**
      * REGEX-TEST: §2§l§m                §f§l§m    §r §e7,891§6/§e10k
      */
@@ -61,9 +65,13 @@ object GardenLevelDisplay {
         "inventory.name",
         "Garden (?:Desk|Level (?<currentLevel>.*))",
     )
+
+    /**
+     * REGEX-TEST: §e§l§m                     §6325,396
+     */
     private val overflowPattern by patternGroup.pattern(
         "inventory.overflow",
-        ".*§r §6(?<overflow>.*)",
+        "§e§l§m\\s+ §6(?<overflow>[\\d,]+)",
     )
 
     /**
@@ -75,23 +83,23 @@ object GardenLevelDisplay {
     )
 
     /**
-     * REGEX-TEST: §7§8Max level reached!
-     * REGEX-TEST: §5§o§7§8Max level reached!
+     * REGEX-TEST: Max level reached!
      */
     private val gardenMaxLevelPattern by patternGroup.pattern(
-        "inventory.max",
-        "(?:§5§o)?§7§8Max level reached!",
+        "inventory.max.new",
+        "Max level reached!",
     )
 
     /**
-     * REGEX-TEST:     §r§8+§r§215 §r§7Garden Experience
+     * WRAPPED-REGEX-TEST: "    §r§8+§r§215 §r§7Garden Experience"
      */
     private val visitorRewardPattern by patternGroup.pattern(
         "chat.increase",
         " {4}§r§8\\+§r§2(?<exp>.*) §r§7Garden Experience",
     )
+    // </editor-fold>
 
-    private var display = ""
+    private var display: Renderable? = null
 
     @HandleEvent
     fun onProfileJoin(event: ProfileJoinEvent) {
@@ -99,7 +107,7 @@ object GardenLevelDisplay {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
 
         visitorRewardPattern.matchMatcher(event.message) {
             addExp(group("exp").toInt())
@@ -135,7 +143,7 @@ object GardenLevelDisplay {
             "SkyBlock Menu" -> event.inventoryItems[10] ?: return
             else -> return
         }
-        gardenItemNamePattern.matchMatcher(item.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()) {
+        gardenItemNamePattern.matchMatcher(item.cleanName) {
             val level = groupOrNull("currentLevel")
             if (level != null) useRomanNumerals = level.isRoman()
         } ?: return
@@ -162,9 +170,9 @@ object GardenLevelDisplay {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onToolTip(event: ToolTipEvent) {
+    fun onToolTip(event: ToolTipTextEvent) {
         if (!config.overflow.get()) return
-        val slotIndex = event.slot.containerSlot
+        val slotIndex = event.slot?.containerSlot
         val name = InventoryUtils.openInventoryName()
         if (!((name == "Desk" && slotIndex == 4) || (name == "SkyBlock Menu" && slotIndex == 10))) return
 
@@ -185,24 +193,24 @@ object GardenLevelDisplay {
         var next = false
         for (line in iterator) {
             if (gardenMaxLevelPattern.matches(line)) {
-                iterator.set("§7Progress to Level ${(currentLevel + 1).toRomanIfNecessary()}")
+                iterator.set("§7Progress to Level ${(currentLevel + 1).toRomanIfNecessary()}".asComponent())
                 next = true
                 continue
             }
-            if (next && line.contains("                    ")) {
+            if (next && line.string.contains("                    ")) {
                 val progress = overflow / needForOnlyNextLvl
                 val progressBar = StringUtils.progressBar(progress, 20)
-                iterator.set("$progressBar §e${overflow.addSeparators()}§6/§e${needForOnlyNextLvl.shortFormat()}")
-                iterator.add("")
-                iterator.add("§b§lOVERFLOW XP:")
-                iterator.add("§7▸ ${overflowTotal.addSeparators()}")
+                iterator.set("$progressBar §e${overflow.addSeparators()}§6/§e${needForOnlyNextLvl.shortFormat()}".asComponent())
+                iterator.add(Component.empty())
+                iterator.add("§b§lOVERFLOW XP:".asComponent())
+                iterator.add("§7▸ ${overflowTotal.addSeparators()}".asComponent())
                 return
             }
         }
     }
 
     private fun update() {
-        display = drawDisplay()
+        display = Renderable.text(drawDisplay())
     }
 
     private fun drawDisplay(): String {
@@ -225,20 +233,18 @@ object GardenLevelDisplay {
         return if (useRomanNumerals) this.toRoman() else this.toString()
     }
 
-    @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
-        if (!isEnabled()) return
-        if (GardenApi.hideExtraGuis()) return
+    @HandleEvent(onlyOnIsland = IslandType.GARDEN)
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+        if (!config.display || GardenApi.hideExtraGuis()) return
 
-        config.pos.renderString(display, posLabel = "Garden Level")
+        val display = display ?: return
+        config.pos.renderRenderable(display, posLabel = "Garden Level")
     }
 
     @HandleEvent
     fun onConfigLoad(event: ConfigLoadEvent) {
         ConditionalUtils.onToggle(config.overflow) { update() }
     }
-
-    private fun isEnabled() = GardenApi.inGarden() && config.display
 
     @HandleEvent
     fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {

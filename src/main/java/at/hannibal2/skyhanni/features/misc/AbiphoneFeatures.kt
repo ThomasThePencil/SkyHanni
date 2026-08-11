@@ -4,7 +4,6 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.data.jsonobjects.repo.neu.AbiphoneContactInfo
-import at.hannibal2.skyhanni.data.jsonobjects.repo.neu.NeuAbiphoneJson
 import at.hannibal2.skyhanni.events.NeuRepositoryReloadEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.chat.TabCompletionEvent
@@ -41,7 +40,7 @@ object AbiphoneFeatures {
     )
 
     @HandleEvent(priority = HandleEvent.HIGHEST)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (callRingPattern.matches(event.message) && acceptUUID == null) readPickupUuid(event)
     }
 
@@ -63,7 +62,7 @@ object AbiphoneFeatures {
 
     @HandleEvent
     fun onNeuRepoReload(event: NeuRepositoryReloadEvent) {
-        val constant = event.getConstant<Map<String, AbiphoneContactInfo>>("abiphone", NeuAbiphoneJson.TYPE)
+        val constant = event.getConstant<Map<String, AbiphoneContactInfo>>("abiphone")
         abiphoneContacts = constant.flatMap { (key, value) ->
             value.callNames ?: listOf(key.removeAllNonLettersAndNumbers().replace(" ", ""))
         }.toSet()
@@ -81,9 +80,9 @@ object AbiphoneFeatures {
         event.move(76, "event.hoppityEggs.hoppityCallWarning.acceptHotkey", "misc.abiphoneAcceptKey")
     }
 
-    private fun readPickupUuid(event: SkyHanniChatEvent) {
+    private fun readPickupUuid(event: SkyHanniChatEvent.Allow) {
         val siblings = event.chatComponent.siblings.takeIf { it.size >= 3 } ?: return
-        val clickEvent = siblings[2]?.style?.clickEvent ?: return
+        val clickEvent = siblings[2].style.clickEvent ?: return
         if (clickEvent.action().name.lowercase() != "run_command" || !clickEvent.value().lowercase().startsWith("/cb")) return
         acceptUUID = clickEvent.value().lowercase().replace("/cb ", "").takeIf { it.isValidUuid() }
         if (acceptUUID != null) DelayedRun.runDelayed(20.seconds) { acceptUUID = null }

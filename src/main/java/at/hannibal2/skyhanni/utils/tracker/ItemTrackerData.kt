@@ -3,8 +3,9 @@ package at.hannibal2.skyhanni.utils.tracker
 import at.hannibal2.skyhanni.utils.NeuInternalName
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import com.google.gson.annotations.Expose
+import kotlin.reflect.KClass
 
-abstract class ItemTrackerData : TrackerData() {
+abstract class ItemTrackerData<T : SessionUptime>(clazz: KClass<T>) : TrackerData<T>(clazz) {
 
     // default implementation, delegates to below
     open fun getDescription(item: TrackedItem) = getDescription(item.timesGained)
@@ -16,7 +17,7 @@ abstract class ItemTrackerData : TrackerData() {
     // TODO add amount in the string
     abstract fun getCoinDescription(item: TrackedItem): List<String>
 
-    open fun getCustomPricePer(internalName: NeuInternalName) = SkyHanniTracker.getPricePer(internalName)
+    open fun getCustomPricePer(internalName: NeuInternalName, tracker: SkyHanniTracker<*, *>) = tracker.getPricePer(internalName)
 
     override fun reset() {
         super.reset()

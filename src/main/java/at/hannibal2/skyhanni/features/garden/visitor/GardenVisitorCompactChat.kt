@@ -20,17 +20,17 @@ object GardenVisitorCompactChat {
     private val patternGroup = RepoPattern.group("garden.visitor.compact")
 
     /**
-     * REGEX-TEST:     §8+§f2x §dGold Essence
-     * REGEX-TEST:     §fDead Bush
-     * REGEX-TEST:     §8+§52 Pelts
-     * REGEX-TEST:     $8+§215 §7Garden Experience
-     * REGEX-TEST:     §8+§35k §7Farming XP
-     * REGEX-TEST:     §8+§311k §7Farming XP
-     * REGEX-TEST:     §8+§c32 Copper
-     * REGEX-TEST:     §7§aFine Flour §8x3
-     * REGEX-TEST:     §7§9Turbo-Carrot I Book
-     * REGEX-TEST:     §7§8+§d1,241 Gemstone Powder
-     * REGEX-TEST:     §7§8+§2Crystal Hollows Pass
+     * WRAPPED-REGEX-TEST: "    §8+§f2x §dGold Essence"
+     * WRAPPED-REGEX-TEST: "    §fDead Bush"
+     * WRAPPED-REGEX-TEST: "    §8+§52 Pelts"
+     * WRAPPED-REGEX-TEST: "    $8+§215 §7Garden Experience"
+     * WRAPPED-REGEX-TEST: "    §8+§35k §7Farming XP"
+     * WRAPPED-REGEX-TEST: "    §8+§311k §7Farming XP"
+     * WRAPPED-REGEX-TEST: "    §8+§c32 Copper"
+     * WRAPPED-REGEX-TEST: "    §7§aFine Flour §8x3"
+     * WRAPPED-REGEX-TEST: "    §7§9Turbo-Carrot I Book"
+     * WRAPPED-REGEX-TEST: "    §7§8+§d1,241 Gemstone Powder"
+     * WRAPPED-REGEX-TEST: "    §7§8+§2Crystal Hollows Pass"
      */
     @Suppress("MaxLineLength")
     private val visitorRewardPattern by patternGroup.pattern(
@@ -61,7 +61,7 @@ object GardenVisitorCompactChat {
     )
 
     /**
-     * REGEX-TEST:   §a§lREWARDS
+     * WRAPPED-REGEX-TEST: "  §a§lREWARDS"
      */
     private val rewardsTextPattern by patternGroup.pattern(
         "rewardstext",
@@ -73,7 +73,7 @@ object GardenVisitorCompactChat {
     private var rewardsList = mutableListOf<String>()
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (GardenApi.inGarden() && config.compactRewardChat && (
                 fullyAcceptedPattern.matcher(event.message.removeResets()).matches() ||
                     visitorRewardPattern.matcher(event.message.removeResets()).matches() ||
@@ -84,7 +84,7 @@ object GardenVisitorCompactChat {
         }
     }
 
-    private fun handleChat(event: SkyHanniChatEvent) {
+    private fun handleChat(event: SkyHanniChatEvent.Allow) {
         val transformedMessage = event.message.removeResets()
 
         fullyAcceptedPattern.matchMatcher(transformedMessage) {
@@ -95,10 +95,8 @@ object GardenVisitorCompactChat {
             visitorNameFormatted = "$visitorColor$visitorName"
         }
 
-        // If visitor name has not yet been matched, we aren't looking at a visitor accept message, and can ignore this.
         if (visitorNameFormatted.isBlank()) return
 
-        // Match rewards and transform
         visitorRewardPattern.matchMatcher(transformedMessage) {
             val rewardColor = groupOrNull("rewardcolor")
             val amountColor = groupOrNull("amountcolor")
@@ -112,7 +110,7 @@ object GardenVisitorCompactChat {
             } else rewardColor
 
             val amountString = if (amount != null) {
-                if (discardRewardNamePattern.matcher(reward).matches()) "$amount"
+                if (discardRewardNamePattern.matcher(reward).matches()) amount
                 else "$amount "
             } else {
                 if (altAmount == null) "" else "$altAmount "
@@ -129,7 +127,7 @@ object GardenVisitorCompactChat {
         compactChat(event)
     }
 
-    private fun compactChat(event: SkyHanniChatEvent) {
+    private fun compactChat(event: SkyHanniChatEvent.Allow) {
         event.blockedReason = "compact_visitor"
         visitorAcceptedChat.add(event.message)
         if (visitorAcceptedChat.size == 3) {

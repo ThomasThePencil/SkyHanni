@@ -1,7 +1,6 @@
 package at.hannibal2.skyhanni.config.features.chat
 
 import at.hannibal2.skyhanni.config.FeatureToggle
-import at.hannibal2.skyhanni.config.OnlyModern
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
@@ -20,13 +19,11 @@ class FilterTypesConfig {
 
     @Expose
     @ConfigOption(name = "Foraging", desc = "")
-    @OnlyModern
     @Accordion
     val foraging: ForagingFilterConfig = ForagingFilterConfig()
 
     @Expose
     @ConfigOption(name = "Hunting", desc = "")
-    @OnlyModern
     @Accordion
     val hunting: HuntingFilterConfig = HuntingFilterConfig()
 
@@ -39,7 +36,7 @@ class FilterTypesConfig {
     @ConfigOption(
         name = "Hypixel Lobbies",
         desc = "Hide announcements in Hypixel lobbies " +
-            "(player joins, loot boxes, prototype lobby messages, radiating generosity, Hypixel tournaments)"
+            "(player joins, loot boxes, prototype lobby messages, radiating generosity, Hypixel tournaments)",
     )
     @ConfigEditorBoolean
     @FeatureToggle
@@ -189,6 +186,12 @@ class FilterTypesConfig {
     @ConfigEditorBoolean
     @FeatureToggle
     var teleportPads: Boolean = false
+
+    @Expose
+    @ConfigOption(name = "Feast Chef Ted", desc = "Hide annoying messages about Kernels getting added to your purse while farming.")
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var masterChef: Boolean = false
 
     // TODO remove
     @Expose

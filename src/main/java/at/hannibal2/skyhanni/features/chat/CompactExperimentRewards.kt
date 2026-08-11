@@ -47,11 +47,11 @@ object CompactExperimentRewards {
 
     /**
      * REGEX-TEST: §8 +§r§3600k Enchanting Exp
-     * REGEX-TEST:  §r§8+§r§3132k Enchanting Exp
-     * REGEX-TEST:  §r§8+§r§aThunderlord V
-     * REGEX-TEST:  §r§8+§r§3143k Enchanting Exp
-     * REGEX-TEST:  §r§8+§r§aGrand Experience Bottle
-     * REGEX-TEST:  §r§8+§r§aCaster V
+     * WRAPPED-REGEX-TEST: " §r§8+§r§3132k Enchanting Exp"
+     * WRAPPED-REGEX-TEST: " §r§8+§r§aThunderlord V"
+     * WRAPPED-REGEX-TEST: " §r§8+§r§3143k Enchanting Exp"
+     * WRAPPED-REGEX-TEST: " §r§8+§r§aGrand Experience Bottle"
+     * WRAPPED-REGEX-TEST: " §r§8+§r§aCaster V"
      */
     private val experimentsDropPattern by patternGroup.pattern(
         "drop",
@@ -66,7 +66,7 @@ object CompactExperimentRewards {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled() || lastTimeTableOpened.passedSince() >= 3.seconds || event.blockedReason != "") return
 
         val message = event.message

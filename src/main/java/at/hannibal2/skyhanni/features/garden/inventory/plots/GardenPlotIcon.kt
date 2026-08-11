@@ -13,10 +13,11 @@ import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.editItemInfo
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.getLoreComponent
 import at.hannibal2.skyhanni.utils.NeuItems.getItemStack
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import net.minecraft.world.SimpleContainer
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 
 @SkyHanniModule
@@ -25,14 +26,14 @@ object GardenPlotIcon {
     private val config get() = GardenApi.config.plotIcon
     private val plotList get() = GardenApi.storage?.plotIcon?.plotList
     private var inInventory = false
-    private var copyStack: ItemStack? = null
+    private var copyStack: SafeItemStack? = null
 
     // TODO replace with enum
     private var editMode = 0 // 0 = off, 1 = on, 2 = reset
     private var lastClickedSlotId = -1
-    private val originalStack = mutableMapOf<Int, ItemStack>()
-    private val cachedStack = mutableMapOf<Int, ItemStack>()
-    private val editStack = ItemStack(Items.WOODEN_AXE)
+    private val originalStack = mutableMapOf<Int, SafeItemStack>()
+    private val cachedStack = mutableMapOf<Int, SafeItemStack>()
+    private val editStack by lazy { SafeItemStack(Items.WOODEN_AXE) }
     private val whitelistedSlot =
         listOf(2, 3, 4, 5, 6, 11, 12, 13, 14, 15, 20, 21, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42)
 
@@ -52,7 +53,7 @@ object GardenPlotIcon {
         for ((index, internalName) in plotList) {
             val old = originalStack[index]!!
             val new = internalName.getItemStack()
-            cachedStack[index] = new.editItemInfo(old.hoverName.formattedTextCompatLeadingWhiteLessResets(), true, old.getLore())
+            cachedStack[index] = new.editItemInfo(old.hoverName, old.getLoreComponent())
         }
     }
 
@@ -103,30 +104,26 @@ object GardenPlotIcon {
                 else
                     editMode--
             }
-            return
-        }
-        if (editMode != 0) {
-            if (event.slotId in 54..89) {
-                event.cancel()
-                copyStack = event.slot?.item?.copy()?.also {
-                    it.count = 1
-                } ?: return
-                // TODO different format, not bold or show not in chat at all.
-                ChatUtils.chat("§6§lClick an item in the desk menu to replace it with that item!")
+        } else if (editMode == 0) {
+            // do nothing
+        } else if (event.slotId in 54..89) {
+            event.cancel()
+            copyStack = event.slot?.item?.copy()?.also {
+                it.count = 1
+            } ?: return
+            // TODO different format, not bold or show not in chat at all.
+            ChatUtils.chat("§6§lClick an item in the desk menu to replace it with that item!")
+        } else {
+            val plotList = plotList ?: return
+            if (!whitelistedSlot.contains(event.slotId)) return
+            event.cancel()
+            if (editMode == 2) {
+                plotList.remove(event.slotId)
                 return
             }
-            if (event.slotId != 53) {
-                val plotList = plotList ?: return
-                if (!whitelistedSlot.contains(event.slotId)) return
-                event.cancel()
-                if (editMode == 2) {
-                    plotList.remove(event.slotId)
-                    return
-                }
-                val copyStack = copyStack ?: return
-                plotList[event.slotId] = copyStack.getInternalName()
-                cachedStack[event.slotId] = copyStack
-            }
+            val copyStack = copyStack ?: return
+            plotList[event.slotId] = copyStack.getInternalName()
+            cachedStack[event.slotId] = copyStack
         }
     }
 

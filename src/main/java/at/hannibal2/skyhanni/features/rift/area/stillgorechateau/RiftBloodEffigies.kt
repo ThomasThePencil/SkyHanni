@@ -6,12 +6,11 @@ import at.hannibal2.skyhanni.data.jsonobjects.repo.RiftEffigiesJson
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.events.RawScoreboardUpdateEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
-import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
 import at.hannibal2.skyhanni.features.rift.RiftApi
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.EntityUtils
+import at.hannibal2.skyhanni.utils.EntityUtils.getEntitiesNearby
 import at.hannibal2.skyhanni.utils.LocationUtils
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzColor
@@ -90,7 +89,7 @@ object RiftBloodEffigies {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Rift Blood Effigies")
 
         if (!isEnabled()) {
@@ -145,10 +144,10 @@ object RiftBloodEffigies {
     }
 
     @HandleEvent
-    fun onSecondPassed(event: SecondPassedEvent) {
+    fun onSecondPassed() {
         if (!isEnabled()) return
 
-        eLoop@for (entity in EntityUtils.getEntitiesNearby<ArmorStand>(LocationUtils.playerLocation(), 15.0)) {
+        eLoop@for (entity in LocationUtils.playerLocation().getEntitiesNearby<ArmorStand>(15.0)) {
             effigiesTimerPattern.matchMatcher(entity.name.formattedTextCompatLessResets()) {
                 val index = getIndex(entity) ?: continue@eLoop
                 val time = TimeUtils.getDuration(group("time"))

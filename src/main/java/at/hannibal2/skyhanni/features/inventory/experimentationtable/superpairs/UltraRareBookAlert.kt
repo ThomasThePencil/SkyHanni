@@ -14,31 +14,52 @@ import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SoundUtils.createSound
 import at.hannibal2.skyhanni.utils.SoundUtils.playSound
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
+import at.hannibal2.skyhanni.utils.compat.obfuscated
+import net.minecraft.ChatFormatting
 import kotlin.time.Duration.Companion.seconds
 
 @SkyHanniModule
 object UltraRareBookAlert {
 
     private val config get() = SkyHanniMod.feature.inventory.experimentationTable
-    private val dragonSound by lazy { createSound("mob.enderdragon.growl", 1f) }
+    private val dragonSound by lazy { createSound("entity.ender_dragon.growl", 1f) }
 
     private var enchantsFound = false
 
     private var lastNotificationTime = SimpleTimeMark.farPast()
+    // Carries isBook from onTableRareUncover into onChestGuiRender, which polls
+    // lastNotificationTime rather than receiving the event directly.
+    private var lastUncoveredWasBook = true
 
-    private fun notification(enchantsName: String) {
+    private fun notification(enchantsName: String, isBook: Boolean) {
         lastNotificationTime = SimpleTimeMark.now()
         dragonSound.playSound()
-        ChatUtils.chat("You have uncovered a §d§kXX§5 ULTRA-RARE BOOK! §d§kXX§e! You found: §9$enchantsName")
+        val typeLabel = if (isBook) " ULTRA-RARE BOOK! " else " ULTRA-RARE ITEM! "
+        ChatUtils.chat(
+            componentBuilder {
+                append("You have uncovered an ")
+                appendWithColor("XX", ChatFormatting.LIGHT_PURPLE) {
+                    obfuscated = true
+                }
+                appendWithColor(typeLabel, ChatFormatting.DARK_PURPLE)
+                appendWithColor("XX", ChatFormatting.LIGHT_PURPLE) {
+                    obfuscated = true
+                }
+                append("! You found: ")
+                appendWithColor(enchantsName, ChatFormatting.BLUE)
+            }
+        )
     }
 
     @HandleEvent(onlyOnIsland = IslandType.PRIVATE_ISLAND)
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (!isEnabled()) return
         if (lastNotificationTime.passedSince() > 5.seconds) return
 
         TitleManager.sendTitle(
-            titleText = "§d§kXX§5 ULTRA-RARE BOOK! §d§kXX",
+            titleText = if (lastUncoveredWasBook) "§d§kXX§5 ULTRA-RARE BOOK! §d§kXX" else "§d§kXX§5 ULTRA-RARE ITEM! §d§kXX",
             duration = 2.seconds,
             location = TitleManager.TitleLocation.INVENTORY,
         )
@@ -47,7 +68,8 @@ object UltraRareBookAlert {
     @HandleEvent(onlyOnIsland = IslandType.PRIVATE_ISLAND)
     fun onTableRareUncover(event: TableRareUncoverEvent) {
         if (enchantsFound || !isEnabled()) return
-        notification(event.dropName)
+        lastUncoveredWasBook = event.isBook
+        notification(event.dropName, event.isBook)
         enchantsFound = true
     }
 

@@ -41,8 +41,8 @@ object CraftMaterialCollector {
     fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
         if (!isEnabled()) return
         val items = event.inventoryItems
-        val correctItem = items[23]?.hoverName.formattedTextCompatLeadingWhiteLessResets() == "§aCrafting Table"
-        val correctSuperCraftItem = items[32]?.hoverName.formattedTextCompatLeadingWhiteLessResets() == "§aSupercraft"
+        val correctItem = items[23]?.hoverName?.string == "Crafting Table"
+        val correctSuperCraftItem = items[32]?.hoverName?.string == "Supercraft"
 
         inRecipeInventory = correctSuperCraftItem && correctItem && !purchasing
         if (!inRecipeInventory) return
@@ -73,7 +73,7 @@ object CraftMaterialCollector {
                 add(
                     Renderable.clickable(
                         "§eAdd to craft material collector!",
-                        tips = listOf("§eClick here to help purchasing the items!"),
+                        tips = listOf("§eClick here to get help purchasing the items!"),
                         onLeftClick = {
                             addToPurchasing(neededMaterials)
                         },
@@ -137,7 +137,7 @@ object CraftMaterialCollector {
             val nameColor = if (isThisMultiply) "§a" else "§e"
             val priceColor = if (isThisMultiply) "§6" else "§7"
             val price = priceColor + calculateTotalPrice(neededMaterials, m).shortFormat()
-            val text = "${nameColor}Mulitply x$m $price"
+            val text = "${nameColor}Multiply x$m $price"
             if (!isThisMultiply) {
                 add(
                     Renderable.clickable(
@@ -164,7 +164,7 @@ object CraftMaterialCollector {
     }
 
     @HandleEvent
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (!isEnabled()) return
         if (!inRecipeInventory && !purchasing) return
 

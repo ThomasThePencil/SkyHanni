@@ -5,15 +5,18 @@ import at.hannibal2.skyhanni.api.enoughupdates.ItemResolutionQuery
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigManager
 import at.hannibal2.skyhanni.data.jsonobjects.repo.ItemAliases
+import at.hannibal2.skyhanni.data.jsonobjects.repo.ItemDisplayNamesJson
 import at.hannibal2.skyhanni.data.jsonobjects.repo.MultiFilterJson
-import at.hannibal2.skyhanni.events.NeuRepositoryReloadEvent
+import at.hannibal2.skyhanni.data.jsonobjects.repo.neu.NeuItemJson
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPriceOrNull
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
+import at.hannibal2.skyhanni.utils.ItemUtils.getRepoItemNameFromJson
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
-import at.hannibal2.skyhanni.utils.PrimitiveIngredient.Companion.toPrimitiveItemStacks
+import at.hannibal2.skyhanni.utils.NeuItems.allItemsCache
+import at.hannibal2.skyhanni.utils.NeuItems.ambiguousDisplayNames
 import at.hannibal2.skyhanni.utils.PrimitiveItemStack.Companion.makePrimitiveStack
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.isVanillaItem
@@ -22,14 +25,13 @@ import at.hannibal2.skyhanni.utils.StringUtils.removeNonAsciiNonColorCode
 import at.hannibal2.skyhanni.utils.StringUtils.removePrefix
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
 import at.hannibal2.skyhanni.utils.collection.TimeLimitedCache
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.compat.getVanillaItem
+import at.hannibal2.skyhanni.utils.json.fromJsonOrNull
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import at.hannibal2.skyhanni.utils.system.PlatformUtils
-import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import net.minecraft.world.item.Item
-import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Blocks
 import java.util.NavigableMap
 import java.util.TreeMap
@@ -39,11 +41,26 @@ import kotlin.time.Duration.Companion.minutes
 object NeuItems {
     private val multiplierCache = mutableMapOf<NeuInternalName, PrimitiveItemStack>()
     private val itemIdCache = mutableMapOf<Item, List<NeuInternalName>>()
-    private val stackResolutionCache: TimeLimitedCache<NeuInternalName, ItemStack> = TimeLimitedCache(2.minutes)
+    private val stackResolutionCache: TimeLimitedCache<NeuInternalName, SafeItemStack> = TimeLimitedCache(2.minutes)
     private val patternGroup = RepoPattern.group("data.neu.items")
+
+    // Internal names excluded from the display name to internal name lookup, because another item uses the same display name.
+    private var ignoredDisplayNames = emptySet<NeuInternalName>()
+
+    internal fun isIgnoredDisplayNameItem(internalName: NeuInternalName): Boolean = internalName in ignoredDisplayNames
+
+    /**
+     * Display names shared by several items where none of them is the one obviously meant.
+     * Resolving them would silently pick a random one, so they resolve to null instead.
+     */
+    private var ambiguousDisplayNames = emptySet<String>()
+
+    /** Callers without color codes, e.g. chat messages, must be caught as well. */
+    private var ambiguousDisplayNamesColorless = emptySet<String>()
 
     /**
      * WRAPPED-REGEX-TEST: "§7[lvl 1➡100] "
+     * WRAPPED-REGEX-TEST: "§7[Lvl {LVL}] "
      * WRAPPED-REGEX-TEST: "§f§f§7[lvl {lvl}] "
      * WRAPPED-REGEX-TEST: "§f§f§7[lvl 1➡100] "
      * WRAPPED-REGEX-TEST: "§f§f§7[Lvl {LVL}] "
@@ -67,65 +84,101 @@ object NeuItems {
 
     private val fallbackItem by lazy {
         ItemUtils.createItemStack(
-            ItemStack(Blocks.BARRIER).item,
+            SafeItemStack(Blocks.BARRIER).itemType,
             "§cMissing Repo Item",
             "§cYour NEU repo seems to be out of date",
         )
     }
 
     @HandleEvent
-    fun onRepoReload(event: RepositoryReloadEvent) {
+    private fun onRepoReload(event: RepositoryReloadEvent) {
         val ignoredItems = event.getConstant<MultiFilterJson>("IgnoredItems")
         ignoreItemsFilter.load(ignoredItems)
         commonItemAliases = event.getConstant<ItemAliases>("ItemAliases")
+        val displayNameData = event.getConstant<ItemDisplayNamesJson>("ItemDisplayNames")
+        ignoredDisplayNames = displayNameData.ignoredInternalNames
+        ambiguousDisplayNames = displayNameData.ambiguousDisplayNames.mapTo(mutableSetOf()) { normalizeDisplayName(it) }
+        ambiguousDisplayNamesColorless = ambiguousDisplayNames.mapTo(mutableSetOf()) { it.removeColor() }
+
+        // The neu repo may have loaded first, in which case the name cache was built without the list above.
+        if (allInternalNames.isNotEmpty()) DelayedRun.runOrNextTick(::readAllNeuItems)
     }
 
     @HandleEvent
-    fun onNeuRepoReload(event: NeuRepositoryReloadEvent) {
-        DelayedRun.onThread.execute {
-            readAllNeuItems()
-        }
+    private fun onNeuRepoReload() {
+        multiplierCache.clear()
+        itemIdCache.clear()
+        DelayedRun.runOrNextTick(::readAllNeuItems)
+    }
+
+    /** The form display names are stored in, both in [allItemsCache] and in [ambiguousDisplayNames]. */
+    internal fun normalizeDisplayName(displayName: String): String =
+        displayName.lowercase().removeNonAsciiNonColorCode().trim()
+
+    internal fun isAmbiguousDisplayName(displayName: String): Boolean {
+        val name = normalizeDisplayName(displayName)
+        return name in ambiguousDisplayNames || name.removeColor() in ambiguousDisplayNamesColorless
     }
 
     private fun readAllNeuItems() {
         allInternalNames.clear()
         val tempAllItemCache = mutableMapOf<String, NeuInternalName>()
         val tempNoColor = TreeMap<String, NeuInternalName>()
+        val duplicates = mutableMapOf<String, MutableList<NeuInternalName>>()
 
-        allNeuRepoItems().keys.forEach { rawInternalName ->
-            // we ignore all builder blocks from the item name -> internal name cache
-            // because builder blocks can have the same display name as normal items.
-            if (rawInternalName.startsWith("BUILDER_")) return@forEach
+        allNeuRepoItems().forEach { (internalName, itemInfo) ->
+            allInternalNames[internalName.asString()] = internalName
 
-            val internalName = rawInternalName.toInternalName()
-            val stack = internalName.getItemStackOrNull() ?: run {
-                ChatUtils.debug("skipped `$this`from readAllNeuItems")
+            // Items sharing their display name with another item, where the other one is the one we want.
+            if (internalName in ignoredDisplayNames) return@forEach
+
+            // Every ignored item is named "§cBugged Item", see ItemUtils.getSpecialRepoItemName.
+            if (ignoreItemsFilter.match(internalName.asString())) return@forEach
+
+            val cleanName = internalName.getRepoItemNameFromJson(itemInfo)?.lowercase()?.removePrefix(neuPetLevelRegex)?.takeIf {
+                it.isNotEmpty()
+            } ?: run {
+                ChatUtils.debug("skipped `$internalName` from readAllNeuItems")
                 return@forEach
             }
-            val cleanName =
-                stack.hoverName.formattedTextCompatLeadingWhiteLessResets()?.lowercase()?.removePrefix(neuPetLevelRegex)?.takeIf {
-                    it.isNotEmpty()
-                } ?: return@forEach
 
             if (cleanName.contains("[lvl 1➡100]")) {
                 if (PlatformUtils.isDevEnvironment) error("wrong name: '$cleanName'")
                 else println("wrong name: '$cleanName'")
             }
 
-            val newCleanName = cleanName.removeNonAsciiNonColorCode().trim()
+            val newCleanName = normalizeDisplayName(cleanName)
+            if (newCleanName in ambiguousDisplayNames) return@forEach
 
-            tempAllItemCache[newCleanName] = internalName
+            tempAllItemCache.put(newCleanName, internalName)?.let { previous ->
+                duplicates.getOrPut(newCleanName) { mutableListOf(previous) }.add(internalName)
+            }
             tempNoColor[newCleanName.removeColor()] = internalName
-            allInternalNames[rawInternalName] = internalName
         }
-        @Suppress("UNCHECKED_CAST")
-        itemNamesWithoutColor = tempNoColor as NavigableMap<String, NeuInternalName>
+        itemNamesWithoutColor = tempNoColor
         allItemsCache = tempAllItemCache
         stackResolutionCache.clear()
+        // These resolve through allItemsCache, so they have to follow every rebuild, not just the neu repo event.
+        ItemNameResolver.clearCache()
+        NeuInternalName.clearItemNameCache()
         ChatUtils.debug("Cleared the NEUItems stack resolution cache")
+        reportDuplicateDisplayNames(duplicates)
     }
 
-    fun getInternalName(itemStack: ItemStack): String? = ItemResolutionQuery()
+    /**
+     * Which of them wins depends on the iteration order of the neu repo, so it can silently
+     * change with a repo update. Anything reported here belongs into ItemDisplayNames.
+     */
+    private fun reportDuplicateDisplayNames(duplicates: Map<String, List<NeuInternalName>>) {
+        if (duplicates.isEmpty()) return
+        ChatUtils.debug("Found ${duplicates.size} duplicate item display names, see console for details.")
+        for ((displayName, internalNames) in duplicates.toSortedMap()) {
+            val all = internalNames.joinToString(", ") { it.asString() }
+            println("duplicate item display name '$displayName': $all")
+        }
+    }
+
+    fun getInternalName(itemStack: SafeItemStack): NeuInternalName? = ItemResolutionQuery()
         .withCurrentGuiContext()
         .withItemStack(itemStack)
         .resolveInternalName()
@@ -135,19 +188,15 @@ object NeuItems {
         return internalName.toInternalName().takeIf { it.getItemStackOrNull() != null }
     }
 
-    fun getInternalNameFromHypixelId(hypixelId: String): NeuInternalName =
-        getInternalNameFromHypixelIdOrNull(hypixelId)
-            ?: error("hypixel item id does not match internal name: $hypixelId")
-
     fun transHypixelNameToInternalName(hypixelId: String): NeuInternalName =
         ItemResolutionQuery.transformHypixelBazaarToNeuItemId(hypixelId).toInternalName()
 
-    fun NeuInternalName.getItemStackOrNull(): ItemStack? = stackResolutionCache.getOrPut(this) {
-        ItemResolutionQuery().withKnownInternalName(asString()).resolveToItemStack()
+    fun NeuInternalName.getItemStackOrNull(): SafeItemStack? = stackResolutionCache.getOrPut(this) {
+        ItemResolutionQuery().withKnownInternalName(this).resolveToItemStack()
             ?: return null
     }.copy()
 
-    fun NeuInternalName.getItemStack(): ItemStack =
+    fun NeuInternalName.getItemStack(): SafeItemStack =
         getItemStackOrNull() ?: run {
             getPriceOrNull() ?: return@run fallbackItem
             if (ignoreItemsFilter.match(this.asString())) return@run fallbackItem
@@ -157,7 +206,7 @@ object NeuItems {
             fallbackItem
         }
 
-    fun isVanillaItem(item: ItemStack): Boolean = item.getInternalName().isVanillaItem()
+    fun isVanillaItem(item: SafeItemStack): Boolean = item.getInternalName().isVanillaItem()
 
     // todo repo
     private val hardcodedVanillaItems = listOf(
@@ -170,9 +219,10 @@ object NeuItems {
         if (hardcodedVanillaItems.contains(asString)) return true
 
         val vanillaName = asString.split("-".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()[0]
-        if (allNeuRepoItems().containsKey(vanillaName)) {
-            val json = allNeuRepoItems()[vanillaName]
-            if (json != null && json.has("vanilla") && json["vanilla"].asBoolean) return true
+        val internalizedVanillaName = vanillaName.toInternalName()
+        if (allNeuRepoItems().containsKey(internalizedVanillaName)) {
+            val itemJson = allNeuRepoItems()[internalizedVanillaName]
+            if (itemJson != null && itemJson.vanilla) return true
         }
         return isVanillaItem(vanillaName)
     }
@@ -190,17 +240,16 @@ object NeuItems {
 
     const val ITEM_FONT_SIZE = 2.0 / 3.0
 
-    fun allNeuRepoItems(): Map<String, JsonObject> = EnoughUpdatesManager.getItemInformation()
+    fun allNeuRepoInternalNames(): Set<NeuInternalName> = EnoughUpdatesManager.getInternalNames()
+    fun allNeuRepoItems(): Map<NeuInternalName, NeuItemJson> = EnoughUpdatesManager.getItemInformation()
 
     fun getInternalNamesForItemId(item: Item): List<NeuInternalName> {
         itemIdCache[item]?.let {
             return it
         }
         val result = allNeuRepoItems().filter {
-            it.value["itemid"].asString.getVanillaItem() == item
-        }.keys.map {
-            it.toInternalName()
-        }
+            it.value.itemId.getVanillaItem() == item
+        }.keys.toList()
         itemIdCache[item] = result
         return result
     }
@@ -231,20 +280,8 @@ object NeuItems {
             if (!recipe.isCraftingRecipe()) continue
 
             val map = mutableMapOf<NeuInternalName, Int>()
-            for (ingredient in recipe.ingredients.toPrimitiveItemStacks()) {
-                val amount = ingredient.amount
-                var internalItemId = ingredient.internalName
-                // ignore cactus green
-                if (internalName == "ENCHANTED_CACTUS_GREEN".toInternalName() && internalItemId == "INK_SACK-2".toInternalName()) {
-                    internalItemId = "CACTUS".toInternalName()
-                }
-
-                // ignore rabbit hide in leather
-                if (internalName == "LEATHER".toInternalName() && internalItemId == "RABBIT_HIDE".toInternalName()) {
-                    continue
-                }
-
-                map.addOrPut(internalItemId, amount)
+            for (ingredient in recipe.ingredients) {
+                addRecipeIngredient(ingredient, internalName, map)
             }
             if (map.size != 1) continue
             val current = map.iterator().next().toPair()
@@ -264,9 +301,28 @@ object NeuItems {
         return result
     }
 
+    private fun addRecipeIngredient(
+        ingredient: PrimitiveIngredient,
+        resultInternalName: NeuInternalName,
+        map: MutableMap<NeuInternalName, Int>,
+    ) {
+        var internalItemId = ingredient.internalName
+        // ignore cactus green
+        if (resultInternalName == "ENCHANTED_CACTUS_GREEN".toInternalName() && internalItemId == "INK_SACK-2".toInternalName()) {
+            internalItemId = "CACTUS".toInternalName()
+        }
+
+        // ignore rabbit hide in leather
+        if (resultInternalName == "LEATHER".toInternalName() && internalItemId == "RABBIT_HIDE".toInternalName()) {
+            return
+        }
+
+        map.addOrPut(internalItemId, ingredient.count.toInt())
+    }
+
     fun getRecipes(internalName: NeuInternalName): Set<PrimitiveRecipe> = EnoughUpdatesManager.getRecipesFor(internalName)
 
-    fun saveNBTData(item: ItemStack, removeLore: Boolean = true): String {
+    fun saveNBTData(item: SafeItemStack, removeLore: Boolean = true): String {
         val jsonObject = EnoughUpdatesManager.stackToJson(item)
         if (!jsonObject.has("internalname")) {
             jsonObject.add("internalname", JsonPrimitive("_"))
@@ -276,9 +332,17 @@ object NeuItems {
         return StringUtils.encodeBase64(jsonString)
     }
 
-    fun loadNBTData(encoded: String): ItemStack {
+    fun loadNBTData(encoded: String): SafeItemStack {
         val jsonString = StringUtils.decodeBase64(encoded)
-        val jsonObject = ConfigManager.gson.fromJson(jsonString, JsonObject::class.java)
-        return EnoughUpdatesManager.jsonToStack(jsonObject, false)
+        val neuItem = ConfigManager.gson.fromJsonOrNull<NeuItemJson>(jsonString) ?: run {
+            ErrorManager.logErrorStateWithData(
+                "Could not parse NEU item from encoded string",
+                internalMessage = "Could not load NEU item from encoded string - GSON parsing failed",
+                "encoded" to encoded,
+                "jsonString" to jsonString,
+            )
+            return ItemUtils.createItemStack(Items.MAP, "unloaded")
+        }
+        return EnoughUpdatesManager.neuItemToStack(neuItem, useCache = false)
     }
 }

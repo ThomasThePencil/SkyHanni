@@ -1,7 +1,7 @@
 package at.hannibal2.skyhanni.features.rift.area.livingcave
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.data.ClickType
+import at.hannibal2.skyhanni.data.InteractClickType
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.events.BlockClickEvent
 import at.hannibal2.skyhanni.events.ItemInHandChangeEvent
@@ -15,10 +15,10 @@ import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalNames
+import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.drainForEach
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -32,10 +32,10 @@ object LivingCaveSnakeFeatures {
 
     var selectedSnake: LivingCaveSnake? = null
 
-    private val FROZEN_WATER_PUNGI = "FROZEN_WATER_PUNGI".toInternalName()
+    val FROZEN_WATER_PUNGI = "FROZEN_WATER_PUNGI".toInternalName()
 
     // TODO maybe move this in repo
-    private val pickaxes = setOf(
+    val pickaxes = setOf(
         "SELF_RECURSIVE_PICKAXE",
         "ANTI_SENTIENT_PICKAXE",
         "EON_PICKAXE",
@@ -98,7 +98,7 @@ object LivingCaveSnakeFeatures {
         val snake = snakes.find { event.position in it.blocks } ?: return
 
         selectedSnake = snake
-        if (event.clickType == ClickType.RIGHT_CLICK) {
+        if (event.clickType == InteractClickType.RIGHT_CLICK) {
             if (InventoryUtils.itemInHandId == FROZEN_WATER_PUNGI)
                 snake.lastCalmTime = SimpleTimeMark.now()
         } else {
@@ -112,7 +112,7 @@ object LivingCaveSnakeFeatures {
     fun onTick() {
         if (!isEnabled()) return
 
-        if (SkyBlockUtils.debug && MinecraftCompat.localPlayer.isShiftKeyDown && snakes.isNotEmpty()) {
+        if (SkyBlockUtils.debug && PlayerUtils.isSneaking() && snakes.isNotEmpty()) {
             snakes.clear()
             ChatUtils.debug("Snakes reset.", replaceSameMessage = true)
             return

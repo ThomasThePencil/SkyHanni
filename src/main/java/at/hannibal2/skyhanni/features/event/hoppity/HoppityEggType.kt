@@ -31,7 +31,8 @@ enum class HoppityEggType(
     BOUGHT_ABIPHONE("✆ Bought", "§a", -1),
     CHOCOLATE_SHOP_MILESTONE("Shop Milestone", "§6§l", -1),
     CHOCOLATE_FACTORY_MILESTONE("Chocolate Milestone", "§6§l", -1),
-    STRAY("Stray", "§a", -1)
+    STRAY("Stray", "§a", -1),
+    VISITOR("Visitor", "§d", -1),
     ;
 
     val isResetting get() = resettingEntries.contains(this)
@@ -55,7 +56,9 @@ enum class HoppityEggType(
 
     fun alreadyResetToday(): Boolean {
         val sbTimeNow = SkyBlockTime.now()
-        return lastReset.day == sbTimeNow.day && lastReset.month == sbTimeNow.month
+        return lastReset.year == sbTimeNow.year &&
+            lastReset.day == sbTimeNow.day &&
+            lastReset.month == sbTimeNow.month
     }
 
     private fun calculateNextSpawn(): SimpleTimeMark {
@@ -79,9 +82,9 @@ enum class HoppityEggType(
         }
     }
 
-    fun markClaimed(mark: SimpleTimeMark? = null) {
+    fun markClaimed(mark: SimpleTimeMark = SimpleTimeMark.now()) {
         claimed = true
-        mark?.let { profileStorage?.mealLastFound?.set(this, it) }
+        profileStorage?.mealLastFound?.set(this, mark)
     }
 
     fun markSpawned(setLastReset: Boolean = false) {
@@ -120,9 +123,9 @@ enum class HoppityEggType(
 
         fun markAllFound() = resettingEntries.forEach { it.markClaimed() }
         fun anyEggsUnclaimed(): Boolean = resettingEntries.any { !it.claimed }
-        fun allEggsUnclaimed(): Boolean = resettingEntries.all { !it.claimed }
+        fun allEggsUnclaimed(): Boolean = resettingEntries.all { !it.isClaimed() }
 
-        internal fun Matcher.getEggType(event: SkyHanniChatEvent): HoppityEggType =
+        internal fun Matcher.getEggType(event: SkyHanniChatEvent.Allow): HoppityEggType =
             entries.find { it.mealName == group("meal") } ?: run {
                 ErrorManager.skyHanniError(
                     "Unknown meal: ${group("meal")}",

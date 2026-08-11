@@ -7,7 +7,7 @@ import at.hannibal2.skyhanni.events.InventoryCloseEvent
 import at.hannibal2.skyhanni.events.InventoryUpdatedEvent
 import at.hannibal2.skyhanni.events.RenderItemTipEvent
 import at.hannibal2.skyhanni.events.RenderObject
-import at.hannibal2.skyhanni.events.minecraft.ToolTipEvent
+import at.hannibal2.skyhanni.events.minecraft.ToolTipTextEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
@@ -17,6 +17,7 @@ import at.hannibal2.skyhanni.utils.NeuItems.getItemStack
 import at.hannibal2.skyhanni.utils.NumberUtil.formatInt
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getAttributeString
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getItemUuid
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getPersonalCompactorActive
@@ -26,7 +27,6 @@ import at.hannibal2.skyhanni.utils.renderables.RenderableTooltips
 import at.hannibal2.skyhanni.utils.renderables.container.RenderableInventory.fakeInventory
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object PersonalCompactorOverlay {
@@ -57,7 +57,7 @@ object PersonalCompactorOverlay {
     private val compactorEnabledMap = mutableMapOf<String, Boolean>()
 
     @HandleEvent
-    fun onToolTip(event: ToolTipEvent) {
+    fun onToolTip(event: ToolTipTextEvent) {
         if (!isEnabled()) return
         if (!shouldShow()) return
 
@@ -126,10 +126,9 @@ object PersonalCompactorOverlay {
         PersonalCompactorConfig.VisibilityMode.ALWAYS -> true
         PersonalCompactorConfig.VisibilityMode.KEYBIND -> config.keybind.isKeyHeld()
         PersonalCompactorConfig.VisibilityMode.EXCEPT_KEYBIND -> !config.keybind.isKeyHeld()
-        else -> false
     }
 
-    private fun getPersonalCompactorEnabled(itemStack: ItemStack): Boolean? {
+    private fun getPersonalCompactorEnabled(itemStack: SafeItemStack): Boolean? {
         val uuid = itemStack.getItemUuid() ?: return null
         return compactorEnabledMap.getOrPut(uuid) { itemStack.getPersonalCompactorActive() }
     }

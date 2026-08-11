@@ -2,19 +2,16 @@ package at.hannibal2.skyhanni.features.mining.fossilexcavator
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.IslandType
-import at.hannibal2.skyhanni.events.InventoryCloseEvent
-import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.InventoryUpdatedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.mining.FossilExcavationEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
-import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.InventoryDetector
 import at.hannibal2.skyhanni.utils.ItemUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 
 @SkyHanniModule
@@ -24,7 +21,7 @@ object FossilExcavatorApi {
     private val chatPatternGroup = patternGroup.group("chat")
 
     /**
-     * REGEX-TEST:   §r§6§lEXCAVATION COMPLETE
+     * WRAPPED-REGEX-TEST: "  §r§6§lEXCAVATION COMPLETE"
      */
     private val startPattern by chatPatternGroup.pattern("start", " {2}§r§6§lEXCAVATION COMPLETE ?")
 
@@ -34,7 +31,7 @@ object FossilExcavatorApi {
     private val endPattern by chatPatternGroup.pattern("end", "§a§l▬{64}")
 
     /**
-     * REGEX-TEST:     §r§6Tusk Fossil
+     * WRAPPED-REGEX-TEST: "    §r§6Tusk Fossil"
      */
     private val itemPattern by chatPatternGroup.pattern("item", " {4}§r(?<item>.+)")
 
@@ -43,49 +40,39 @@ object FossilExcavatorApi {
      */
     private val emptyPattern by chatPatternGroup.pattern("empty", "§cYou didn't find anything. Maybe next time!")
 
+    /**
+     * REGEX-TEST: Fossil Excavator
+     */
+    private val excavatorInventoryPattern by patternGroup.pattern("inventory", "Fossil Excavator")
+
     private var inLoot = false
     private val loot = mutableListOf<Pair<String, Int>>()
 
-    var inInventory = false
     var inExcavatorMenu = false
 
     val scrapItem = "SUSPICIOUS_SCRAP".toInternalName()
 
-    @HandleEvent(onlyOnIsland = IslandType.DWARVEN_MINES)
-    fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
-        if (event.inventoryName != "Fossil Excavator") return
-        inInventory = true
-    }
+    val excavatorInventory = InventoryDetector(
+        onCloseInventory = { inExcavatorMenu = false }
+    ) { excavatorInventoryPattern }
 
     @HandleEvent
     fun onInventoryUpdated(event: InventoryUpdatedEvent) {
-        if (!inInventory) return
-        val slots = InventoryUtils.getItemsInOpenChest()
-        val itemNames = slots.map { it.item.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor() }
-        inExcavatorMenu = itemNames.any { it == "Start Excavator" }
+        if (!excavatorInventory.isInside()) return
+        inExcavatorMenu = event.inventoryItems.values.any {
+            it.cleanName == "Start Excavator"
+        }
     }
 
     @HandleEvent
     fun onWorldChange() {
-        inInventory = false
-        inExcavatorMenu = false
-    }
-
-    @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
-        inInventory = false
         inExcavatorMenu = false
     }
 
     @HandleEvent(onlyOnIsland = IslandType.DWARVEN_MINES)
-    fun onChat(event: SkyHanniChatEvent) {
-
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         val message = event.message
-
-        if (emptyPattern.matches(message)) {
-            FossilExcavationEvent(emptyList()).post()
-        }
-
+        if (emptyPattern.matches(message)) FossilExcavationEvent(emptyList()).post()
 
         if (startPattern.matches(message)) {
             inLoot = true
@@ -111,7 +98,7 @@ object FossilExcavatorApi {
             ItemUtils.readItemAmount(group("item"))
         } ?: return
 
-        ItemUtils.readBookType(pair.first)?.let {
+        ItemUtils.readBookTypeStrippedColor(pair.first)?.let {
             pair = it to pair.second
         }
         loot.add(pair)

@@ -1,16 +1,17 @@
 package at.hannibal2.skyhanni.test
 
-import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.events.InventoryUpdatedEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.ItemUtils.getSkullOwner
 import at.hannibal2.skyhanni.utils.ItemUtils.getSkullTexture
 import at.hannibal2.skyhanni.utils.NumberUtil.formatInt
 import at.hannibal2.skyhanni.utils.OSUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.StringUtils.removeWordsAtEnd
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.nextAfter
@@ -18,7 +19,6 @@ import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessRes
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.Expose
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object TestCopyBestiaryValues {
@@ -41,18 +41,23 @@ object TestCopyBestiaryValues {
         var mobs: Array<String> = emptyArray()
 
         @Expose
+        var bracketType: String? = null
+
+        @Expose
         var bracket: Int = 0
     }
 
+    // TODO add regex test
+    @Suppress("RepoPatternRegexTestMissing")
     private val bestiaryTypePattern by RepoPattern.pattern(
         "test.bestiary.type",
-        "\\[Lv(?<lvl>.*)] (?<text>.*)"
+        "\\[Lv(?<lvl>.*)] (?<text>.*)",
     )
 
     @HandleEvent(priority = HandleEvent.LOW)
-    fun onInventoryUpdated(event: InventoryUpdatedEvent) {
-        if (!SkyHanniMod.feature.dev.debug.copyBestiaryData) return
-        SkyHanniDebugsAndTests.displayLine = ""
+    private fun onInventoryUpdated(event: InventoryUpdatedEvent) {
+        if (!DevApi.config.debug.copyBestiaryData) return
+        SkyHanniDebugsAndTests.displayLine = null
 
         val backItem = event.inventoryItems[3 + 9 * 5 + 3] ?: return
         if (backItem.getLore().none { it.contains("Bestiary Milestone") }) {
@@ -68,7 +73,7 @@ object TestCopyBestiaryValues {
         copy(titleItem, event.inventoryItems)
     }
 
-    private fun copy(titleItem: ItemStack, inventoryItems: Map<Int, ItemStack>) {
+    private fun copy(titleItem: SafeItemStack, inventoryItems: Map<Int, SafeItemStack>) {
         val titleName = titleItem.hoverName.formattedTextCompatLeadingWhiteLessResets().removeWordsAtEnd(1)
 
         val obj = BestiaryObject()
@@ -89,8 +94,8 @@ object TestCopyBestiaryValues {
         val mobs = mutableListOf<String>()
         for (i in 10..43) {
             val stack = inventoryItems[i] ?: continue
-            bestiaryTypePattern.matchMatcher(stack.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()) {
-                val lvl = group("lvl").toInt()
+            bestiaryTypePattern.matchMatcher(stack.cleanName) {
+                val lvl = group("lvl").formatInt()
                 var text = group("text").lowercase().replace(" ", "_")
 
                 val master = text.endsWith("(master)")
@@ -104,6 +109,10 @@ object TestCopyBestiaryValues {
         }
         obj.mobs = mobs.toTypedArray()
 
+        if (lore.any { it.contains("Critter") }) {
+            obj.bracketType = "CRITTERS"
+        }
+
         val gson = GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create()
         val text = gson.toJson(obj)
         OSUtils.copyToClipboard(text)
@@ -112,7 +121,7 @@ object TestCopyBestiaryValues {
     }
 
     @HandleEvent
-    fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
+    private fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
         event.move(3, "dev.copyBestiaryData", "dev.debug.copyBestiaryData")
     }
 }

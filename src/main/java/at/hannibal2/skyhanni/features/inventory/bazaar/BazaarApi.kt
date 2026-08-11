@@ -7,13 +7,11 @@ import at.hannibal2.skyhanni.data.OwnInventoryData
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.bazaar.HypixelBazaarFetcher
 import at.hannibal2.skyhanni.events.GuiContainerEvent
-import at.hannibal2.skyhanni.events.InventoryCloseEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.bazaar.BazaarOpenedProductEvent
 import at.hannibal2.skyhanni.events.bazaar.BazaarTransactionEvent
 import at.hannibal2.skyhanni.events.bazaar.BazaarTransactionEvent.TransactionType
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
-import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.features.dungeon.DungeonApi
 import at.hannibal2.skyhanni.features.nether.kuudra.KuudraApi
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
@@ -21,6 +19,7 @@ import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils.getUpperItems
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
@@ -35,6 +34,7 @@ import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils.highlight
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.equalsIgnoreColor
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
@@ -43,7 +43,6 @@ import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessRes
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.world.inventory.ChestMenu
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration.Companion.seconds
 
 @SkyHanniModule
@@ -115,7 +114,7 @@ object BazaarApi {
 
     private var taxRate: Double
         get() = storage?.taxRate ?: 1.25
-        private set(value) {
+        set(value) {
             storage?.taxRate = value
         }
 
@@ -128,11 +127,30 @@ object BazaarApi {
         )
     }
 
-    fun isBazaarItem(stack: ItemStack): Boolean = stack.getInternalName().isBazaarItem()
+    fun isBazaarItem(stack: SafeItemStack): Boolean = stack.getInternalName().isBazaarItem()
 
     fun NeuInternalName.isBazaarItem() = getBazaarData() != null
 
-    fun searchForBazaarItem(internalName: NeuInternalName, amount: Int = -1) {
+    /**
+     * The amount of this item the player has ordered but not received yet, summed over all
+     * open buy orders.
+     *
+     * Refreshed whenever a bazaar order inventory is opened. Kept roughly current in between
+     * by the bazaar chat messages.
+     */
+    fun NeuInternalName.getOpenBuyOrderAmount(): Int =
+        BazaarOrderApi.getOpenAmount(this, SimpleTransactionType.BUY_ORDER)
+
+    /**
+     * The amount of this item the player has offered for sale but not sold yet.
+     *
+     * Only refreshed while a bazaar order inventory is open. No chat message updates this in
+     * between, unlike the buy side, so the value can be out of date.
+     */
+    fun NeuInternalName.getOpenSellOfferAmount(): Int =
+        BazaarOrderApi.getOpenAmount(this, SimpleTransactionType.SELL_OFFER)
+
+    fun searchForBazaarItem(internalName: NeuInternalName, amount: Int? = null) {
         searchForBazaarItem(internalName.itemNameWithoutColor, amount)
     }
 
@@ -145,9 +163,18 @@ object BazaarApi {
         currentSearchedItem = displayName.removeColor()
     }
 
+    fun searchForBazaarItemOrRecipe(internalName: NeuInternalName, amount: Int? = null) {
+        searchForBazaarItemOrRecipe(internalName.itemNameWithoutColor, amount)
+    }
+
+    fun searchForBazaarItemOrRecipe(displayName: String, amount: Int? = null) {
+        if (!SkyBlockUtils.noTradeMode) searchForBazaarItem(displayName, amount)
+        else HypixelCommands.recipe(displayName)
+    }
+
     @HandleEvent(priority = HandleEvent.HIGHEST)
-    fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
-        inBazaarInventory = checkIfInBazaar(event)
+    private fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
+        inBazaarInventory = event.checkIfInBazaar()
         if (inBazaarInventory) {
             updateTaxRate(event.inventoryItems)
 
@@ -159,24 +186,31 @@ object BazaarApi {
     }
 
     @HandleEvent
-    fun onSlotClick(event: GuiContainerEvent.SlotClickEvent) {
+    private fun onSlotClick(event: GuiContainerEvent.SlotClickEvent) {
         val item = event.item ?: return
         val itemName = item.hoverName.formattedTextCompatLeadingWhiteLessResets()
-        if (isBazaarOrderInventory(InventoryUtils.openInventoryName())) {
-            val internalName = item.getInternalNameOrNull() ?: return
-            if (itemName.contains("SELL")) {
-                orderOptionProduct = internalName
-            } else if (itemName.contains("BUY")) {
-                // pickup items from bazaar order
-                OwnInventoryData.ignoreItem(1.seconds) { it == internalName }
-                // prepare for cancel buy order as well
-                orderOptionProduct = internalName
+        val openInvName = InventoryUtils.openInventoryName()
+
+        if (isBazaarOrderInventory(openInvName)) {
+            val nameStr = item.cleanName.removePrefix("BUY ").removePrefix("SELL ")
+            val internalName = item.getInternalNameOrNull() ?: NeuInternalName.fromItemNameOrNull(nameStr)
+
+
+            if (internalName != null) {
+                if (itemName.contains("SELL", ignoreCase = true)) {
+                    orderOptionProduct = internalName
+                } else if (itemName.contains("BUY", ignoreCase = true)) {
+                    // pickup items from bazaar order
+                    OwnInventoryData.ignoreItem(1.seconds) { it == internalName }
+                    // prepare for cancel buy order as well
+                    orderOptionProduct = internalName
+                }
             }
         }
-        if (InventoryUtils.openInventoryName() == "Order options" && itemName == "§cCancel Order") {
+
+        if (openInvName == "Order options" && itemName.contains("Cancel Order", ignoreCase = true)) {
             // pickup items from own bazaar order
             OwnInventoryData.ignoreItem(1.seconds) { it == orderOptionProduct }
-
         }
 
         if (inBazaarInventory) {
@@ -187,18 +221,15 @@ object BazaarApi {
         }
     }
 
-    private fun getOpenedProduct(inventoryItems: Map<Int, ItemStack>): NeuInternalName? {
+    private fun getOpenedProduct(inventoryItems: Map<Int, SafeItemStack>): NeuInternalName? {
         val buyInstantly = inventoryItems[10] ?: return null
-
         if (buyInstantly.hoverName.formattedTextCompatLeadingWhiteLessResets() != "§aBuy Instantly") return null
         val bazaarItem = inventoryItems[13] ?: return null
-
         return NeuInternalName.fromItemName(bazaarItem.hoverName.formattedTextCompatLeadingWhiteLessResets())
     }
 
-    private fun updateTaxRate(inventoryItems: Map<Int, ItemStack>) {
+    private fun updateTaxRate(inventoryItems: Map<Int, SafeItemStack>) {
         val sellInstantly = inventoryItems[11] ?: return
-
         if (sellInstantly.hoverName.formattedTextCompatLeadingWhiteLessResets() != "§6Sell Instantly") return
         taxPattern.firstMatcher(sellInstantly.getLore()) {
             taxRate = group("tax").formatDouble()
@@ -206,9 +237,8 @@ object BazaarApi {
     }
 
     @HandleEvent
-    fun onTick(event: SkyHanniTickEvent) {
+    private fun onTick() {
         if (ApiUtils.isHypixelItemsDisabled()) return
-
         if (!loadedNpcPriceData) {
             loadedNpcPriceData = true
             holder.start()
@@ -217,11 +247,10 @@ object BazaarApi {
 
     // TODO cache
     @HandleEvent(onlyOnSkyblock = true)
-    fun onBackgroundDrawn(event: GuiContainerEvent.BackgroundDrawnEvent) {
+    private fun onBackgroundDrawn(event: GuiContainerEvent.BackgroundDrawnEvent) {
         if (!inBazaarInventory) return
         if (!SkyHanniMod.feature.inventory.bazaar.purchaseHelper) return
         if (currentSearchedItem == "") return
-
         if (event.gui !is ContainerScreen) return
         val chest = event.container as ChestMenu
 
@@ -229,16 +258,15 @@ object BazaarApi {
             if (chest.slots.indexOf(slot) !in 9..44) {
                 continue
             }
-
-            if (stack.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor() == currentSearchedItem) {
+            if (stack.cleanName == currentSearchedItem) {
                 slot.highlight(LorenzColor.GREEN)
             }
         }
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
-        val message = event.message.removeColor()
+    private fun onChat(event: SkyHanniChatEvent.Allow) {
+        val message = event.cleanMessage
         transactionPattern.matchMatcher(message) {
             val item = group("item")
             val coins = group("coins").formatDoubleOrNull() ?: return
@@ -256,33 +284,63 @@ object BazaarApi {
         }
     }
 
-    private fun checkIfInBazaar(event: InventoryFullyOpenedEvent): Boolean {
-        val items = event.inventorySize.let { listOf(it - 5, it - 6) }.mapNotNull { event.inventoryItems[it] }
-        if (items.any { it.hoverName.formattedTextCompatLeadingWhiteLessResets().equalsIgnoreColor("Go Back") && it.getLore().firstOrNull() == "§7To Bazaar" }) {
-            return true
+    private fun InventoryFullyOpenedEvent.checkIfInBazaar(): Boolean {
+        val itemMatch = inventorySize.let { listOf(it - 5, it - 6) }.mapNotNull { inventoryItems[it] }.any {
+            it.hoverName.string.equalsIgnoreColor("Go Back") &&
+                it.getLore().firstOrNull() == "§7To Bazaar"
         }
+        if (itemMatch) return true
 
         // check for Buy Instantly
-        event.inventoryItems[16]?.let {
-            if (it.hoverName.formattedTextCompatLeadingWhiteLessResets() == "§aCustom Amount" && it.getLore().firstOrNull() == "§8Buy Order Quantity") {
+        inventoryItems[16]?.let {
+            if (it.hoverName.string == "Custom Amount" && it.getLore().firstOrNull() == "§8Buy Order Quantity") {
                 return true
             }
         }
 
-        if (isBazaarOrderInventory(event.inventoryName)) return true
-        return inventoryNamePattern.matches(event.inventoryName)
+        if (isBazaarOrderInventory(inventoryName)) return true
+        return inventoryNamePattern.matches(inventoryName)
     }
 
     @HandleEvent
-    fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
+    private fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
         event.move(25, "bazaar", "inventory.bazaar")
     }
 
     @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
+    private fun onInventoryClose() {
         inBazaarInventory = false
         currentlyOpenedProduct = null
     }
 
     fun isBazaarOrderInventory(inventoryName: String): Boolean = inventoryBazaarOrdersPattern.matches(inventoryName)
+
+    /**
+     * Gets the sum of Coins you can get when using the specified sell type to sell the item.
+     * For example if you want to instant sell 71680 enchanted coal from sack you can't use top offer only.
+     * The best offers may be inflated, and you are selling all the items so you must use the prices in each order as such.
+     */
+    fun calculatePriceOfAvailableOrders(
+        item: NeuInternalName,
+        count: Long,
+        priceSource: SimpleTransactionType,
+    ): Double? {
+        val bazaarData = item.getBazaarData()?.product ?: return null
+        val offers = if (priceSource == SimpleTransactionType.SELL_OFFER) bazaarData.buySummary else bazaarData.sellSummary
+        var remaining = count
+        var totalPrice = 0.0
+        for (offer in offers) {
+            val takeAmount = offer.amount.coerceAtMost(remaining)
+            totalPrice += takeAmount * offer.pricePerUnit
+            remaining -= takeAmount
+            if (remaining <= 0) break
+        }
+        if (remaining > 0) return null
+        return totalPrice
+    }
+
+    enum class SimpleTransactionType {
+        BUY_ORDER,
+        SELL_OFFER,
+    }
 }

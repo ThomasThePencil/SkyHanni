@@ -9,11 +9,10 @@ import at.hannibal2.skyhanni.utils.EntityUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.isSkull
 import at.hannibal2.skyhanni.utils.blockhighlight.SkyHanniBlockHighlighter
 import at.hannibal2.skyhanni.utils.blockhighlight.TimedHighlightBlock
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.getInventoryItems
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.getStandHelmet
 import at.hannibal2.skyhanni.utils.compat.InventoryCompat.isNotEmpty
 import at.hannibal2.skyhanni.utils.compat.InventoryCompat.orNull
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
-import at.hannibal2.skyhanni.utils.compat.getInventoryItems
-import at.hannibal2.skyhanni.utils.compat.getStandHelmet
 import at.hannibal2.skyhanni.utils.toLorenzVec
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.level.block.Blocks
@@ -30,7 +29,7 @@ object FrozenTreasureHighlighter {
     )
 
     private fun isEnabled(): Boolean {
-        return IslandType.WINTER.isCurrent() && WinterApi.inGlacialCave() && config.enabled
+        return IslandType.WINTER.isInIsland() && WinterApi.inGlacialCave() && config.enabled
     }
 
     private const val yOffset = 2
@@ -39,11 +38,11 @@ object FrozenTreasureHighlighter {
     fun onTick() {
         if (!isEnabled()) return
 
-        for (armorStand in EntityUtils.getEntitiesNextToPlayer<ArmorStand>(50.0)) {
+        for (armorStand in EntityUtils.getEntitiesNearby<ArmorStand>(50.0)) {
             if (armorStand.getInventoryItems().count { it.isNotEmpty() } != 1) continue
 
             val standHelmet = armorStand.getStandHelmet().orNull() ?: continue
-            if (standHelmet.isSkull() && standHelmet.hoverName.formattedTextCompatLeadingWhiteLessResets().endsWith("Head")) continue
+            if (standHelmet.isSkull() && standHelmet.hoverName.string.endsWith("Head")) continue
 
             val treasureLocation = armorStand.blockPosition().toLorenzVec().up(yOffset)
             blockHighlighter.addBlock(TimedHighlightBlock(treasureLocation))

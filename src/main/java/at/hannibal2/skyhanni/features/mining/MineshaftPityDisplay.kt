@@ -7,14 +7,18 @@ import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.MiningApi
 import at.hannibal2.skyhanni.data.ProfileStorageData
+import at.hannibal2.skyhanni.data.achievements.Achievement
 import at.hannibal2.skyhanni.data.hotx.HotmData
 import at.hannibal2.skyhanni.data.hotx.HotmReward
 import at.hannibal2.skyhanni.data.model.TabWidget
-import at.hannibal2.skyhanni.events.IslandChangeEvent
+import at.hannibal2.skyhanni.events.IslandJoinEvent
+import at.hannibal2.skyhanni.events.IslandLeaveEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.WidgetUpdateEvent
+import at.hannibal2.skyhanni.events.achievements.AchievementRegistrationEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.mining.OreMinedEvent
+import at.hannibal2.skyhanni.features.achievements.AchievementManager
 import at.hannibal2.skyhanni.features.mining.MineshaftPityDisplay.PityBlock.Companion.getPity
 import at.hannibal2.skyhanni.features.mining.MineshaftPityDisplay.PityBlock.Companion.getPityBlock
 import at.hannibal2.skyhanni.features.mining.OreType.Companion.getOreType
@@ -27,14 +31,16 @@ import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderDisplayHelper
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.chat.TextHelper
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
 import at.hannibal2.skyhanni.utils.compat.BlockCompat
 import at.hannibal2.skyhanni.utils.compat.ColoredBlockCompat
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
 import at.hannibal2.skyhanni.utils.compat.hover
+import at.hannibal2.skyhanni.utils.compat.plus
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
 import at.hannibal2.skyhanni.utils.renderables.container.VerticalContainerRenderable.Companion.vertical
@@ -43,7 +49,6 @@ import at.hannibal2.skyhanni.utils.renderables.primitives.placeholder
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import com.google.gson.annotations.Expose
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Blocks
 
 @SkyHanniModule
@@ -98,7 +103,7 @@ object MineshaftPityDisplay {
 
 
     /**
-     * REGEX-TEST:  Glacite Mineshafts: 124/2,000
+     * WRAPPED-REGEX-TEST: " Glacite Mineshafts: 124/2,000"
      */
     private val tabPityPattern by group.pattern(
         "tablist",
@@ -122,8 +127,20 @@ object MineshaftPityDisplay {
         update()
     }
 
+    private const val SHAFT_ACHIEVEMENT = "100 shaft"
+
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onAchievementRegistration(event: AchievementRegistrationEvent) {
+        val achievement = Achievement(
+            name = "Quick Shafter",
+            description = "Spawn a Mineshaft in under 100 Pity",
+            userLuckAmount = 10f,
+        )
+        event.register(achievement, SHAFT_ACHIEVEMENT)
+    }
+
+    @HandleEvent
+    fun onChat(event: SkyHanniChatEvent.Modify) {
         if (!MiningApi.inGlacialTunnels()) return
         if (MiningNotifications.mineshaftSpawn.matches(event.message)) {
             val pityCounter = calculateCounter()
@@ -131,11 +148,15 @@ object MineshaftPityDisplay {
             val counterUntilPity = MAX_COUNTER - pityCounter
             val totalBlocks = PityBlock.entries.sumOf { it.blocksBroken + it.spreadBlocksBroken }
 
+            if (counterUntilPity < 100 && everFoundPityWidget) {
+                AchievementManager.completeAchievement(SHAFT_ACHIEVEMENT)
+            }
+
             mineshaftTotalBlocks += totalBlocks
             mineshaftTotalCount++
             sessionMineshafts++
 
-            val message = event.message + " §e($counterUntilPity)"
+            val message = event.chatComponent.copy() + " §e($counterUntilPity)"
 
             val hoverText = buildList {
                 add("§7Blocks mined: §e$totalBlocks")
@@ -166,11 +187,12 @@ object MineshaftPityDisplay {
 
             resetCounter()
 
-            val newComponent = TextHelper.text(message) {
+            val newComponent = componentBuilder {
+                append(message)
                 hover = TextHelper.multiline(hoverText)
             }
 
-            if (config.modifyChatMessage) event.chatComponent = newComponent
+            if (config.modifyChatMessage) event.replaceComponent(newComponent, "shaft_count")
         }
     }
 
@@ -183,15 +205,14 @@ object MineshaftPityDisplay {
     private var tablistPity = MAX_COUNTER
     private var everFoundPityWidget = false
 
-    @HandleEvent
+    @HandleEvent(onlyOnIsland = IslandType.DWARVEN_MINES)
     fun onPityWidget(event: WidgetUpdateEvent) {
-        if (!isDisplayEnabled()) return
         if (!event.isWidget(TabWidget.PITY)) return
         for (line in event.lines) {
-            val cleanLine = line.removeColor()
-            tabPityPattern.matchMatcher(cleanLine) {
+            tabPityPattern.matchMatcher(line) {
                 everFoundPityWidget = true
                 tablistPity = MAX_COUNTER - group("pity").formatInt()
+                update()
             }
         }
     }
@@ -321,8 +342,15 @@ object MineshaftPityDisplay {
     }
 
     @HandleEvent
-    fun onIslandChange(event: IslandChangeEvent) {
-        if (event.newIsland == IslandType.MINESHAFT || event.oldIsland == IslandType.MINESHAFT) {
+    fun onIslandChange(event: IslandJoinEvent) {
+        if (event.island == IslandType.MINESHAFT) {
+            resetCounter()
+        }
+    }
+
+    @HandleEvent
+    fun onIslandLeave(event: IslandLeaveEvent) {
+        if (event.island == IslandType.MINESHAFT) {
             resetCounter()
         }
     }
@@ -353,53 +381,56 @@ object MineshaftPityDisplay {
         val displayName: String,
         val oreTypes: List<OreType>,
         val multiplier: Int,
-        val displayItem: ItemStack,
+        private val displayItemProvider: () -> SafeItemStack,
     ) {
         MITHRIL(
             "Mithril",
             listOf(OreType.MITHRIL),
             2,
-            ColoredBlockCompat.LIGHT_BLUE.createWoolStack(),
+            { ColoredBlockCompat.LIGHT_BLUE.createWoolStack() },
         ),
-        // cant rename enum because config explodes
+
+        // can't rename enum because config explodes
         GEMSTONE(
             "Low Tier Gemstone",
             OreType.entries.filter { it.isLowTierGemstone() },
             8,
-            ColoredBlockCompat.RED.createGlassStack(),
+            { ColoredBlockCompat.RED.createGlassStack() },
         ),
         HIGH_TIER_GEMSTONE(
             "High Tier Gemstone",
             OreType.entries.filter { it.isHighTierGemstone() },
             10,
-            ColoredBlockCompat.BLUE.createGlassStack(),
+            { ColoredBlockCompat.BLUE.createGlassStack() },
         ),
         GLACITE(
             "Glacite",
             listOf(OreType.GLACITE),
             4,
-            ItemStack(Blocks.PACKED_ICE),
+            { SafeItemStack(Blocks.PACKED_ICE) },
         ),
         TUNGSTEN(
             "Tungsten",
             listOf(OreType.TUNGSTEN),
             4,
-            ItemStack(Blocks.CLAY),
+            { SafeItemStack(Blocks.CLAY) },
         ),
         UMBER(
             "Umber",
             listOf(OreType.UMBER),
             4,
-            ItemStack(Blocks.RED_SANDSTONE),
+            { SafeItemStack(Blocks.RED_SANDSTONE) },
         ),
 
         TITANIUM(
             "Titanium",
             listOf(OreType.TITANIUM),
             8,
-            BlockCompat.createSmoothDiorite(),
+            { BlockCompat.createSmoothDiorite() },
         ),
         ;
+
+        val displayItem: SafeItemStack by lazy { displayItemProvider() }
 
         companion object {
 

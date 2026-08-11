@@ -13,8 +13,8 @@ import at.hannibal2.skyhanni.events.IslandChangeEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.events.hoppity.EggFoundEvent
 import at.hannibal2.skyhanni.events.inventory.AttemptedInventoryCloseEvent
-import at.hannibal2.skyhanni.events.minecraft.SkyHanniTickEvent
 import at.hannibal2.skyhanni.features.event.hoppity.HoppityEggType
+import at.hannibal2.skyhanni.features.inventory.chocolatefactory.CFApi
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.KeyboardManager
@@ -43,8 +43,8 @@ object CFStrayTimer {
         timer = when (event.type) {
             // If a stray is found, the timer is no longer relevant
             HoppityEggType.STRAY -> Duration.ZERO
-            // Only reset the timer for meal entries and hitman eggs
-            in HoppityEggType.resettingEntries, HoppityEggType.HITMAN -> 30.seconds
+            // Only reset the timer for meal entries, and hitman/visitor rabbits
+            in HoppityEggType.resettingEntries, HoppityEggType.HITMAN, HoppityEggType.VISITOR -> 30.seconds
             else -> return
         }
         lastTimerSubtraction = null
@@ -57,10 +57,10 @@ object CFStrayTimer {
     }
 
     @HandleEvent
-    fun onInventoryUpdate(event: InventoryUpdatedEvent) {
+    fun onInventoryUpdated(event: InventoryUpdatedEvent) {
         if (timer == Duration.ZERO) return
-        timer = when (event.inventoryName) {
-            "Chocolate Factory" -> timer
+        timer = when {
+            CFApi.inChocolateFactory -> timer
             else -> 30.seconds
         }
     }
@@ -74,7 +74,7 @@ object CFStrayTimer {
     }
 
     @HandleEvent
-    fun onTick(event: SkyHanniTickEvent) {
+    fun onTick() {
         if (!isEnabled()) return
         lastTimerSubtraction = lastTimerSubtraction?.takeIfInitialized()?.let {
             timer -= it.passedSince()
@@ -88,7 +88,7 @@ object CFStrayTimer {
     }
 
     @HandleEvent
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (!isEnabled()) return
         config.strayTimerPosition.renderRenderable(getTimerRenderable(), posLabel = "Stray Timer")
     }

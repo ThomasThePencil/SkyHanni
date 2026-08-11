@@ -21,7 +21,7 @@ import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.javaField
 import kotlin.reflect.jvm.jvmErasure
 import kotlin.reflect.typeOf
-import com.google.gson.internal.`$Gson$Types` as InternalGsonTypes
+import com.google.gson.internal.GsonTypes as InternalGsonTypes
 
 @Retention(AnnotationRetention.RUNTIME)
 @Target(AnnotationTarget.CLASS)
@@ -122,10 +122,14 @@ class KotlinTypeAdapterFactory : TypeAdapterFactory {
                 try {
                     return primaryConstructor.callBy(args)
                 } catch (e: IllegalArgumentException) {
-                    System.err.println("❗ Failed to invoke constructor for ${kotlinClass.qualifiedName}: ${e.message}")
-                    args.forEach { (param, value) ->
-                        System.err.println("  • ${param.name} : expected=${param.type}  value=$value  actualType=${value?.javaClass}")
+                    val errorString = buildString {
+                        appendLine("❗ Failed to invoke constructor for ${kotlinClass.simpleName}")
+                        appendLine("  Reason: ${e.message}")
+                        args.forEach { (param, value) ->
+                            appendLine("  • ${param.name} : expected=${param.type}  value=$value  actualType=${value?.javaClass}")
+                        }
                     }
+                    System.err.println(errorString)
                     throw e
                 }
             }

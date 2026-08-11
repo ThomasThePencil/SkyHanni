@@ -1,45 +1,55 @@
 package at.hannibal2.skyhanni.mixins.hooks
 
+import at.hannibal2.skyhanni.features.chroma.ChromaFontManager
+import at.hannibal2.skyhanni.features.misc.visualwords.ModifyVisualWords
+import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
-import at.hannibal2.skyhanni.utils.compat.unformattedTextForChatCompat
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import net.minecraft.client.gui.components.ChatComponent
 import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.Style
 
 object GuiChatHook {
 
     @JvmStatic
-    var currentComponent: Component? = null
-
-    lateinit var replacement: Component
+    var replacementComponent: Component? = null
 
     fun replaceEntireComponent(title: String, chatStyle: Style) {
-        if (!this::replacement.isInitialized) return
-
         // Initialise new component
         val newComponent = title.asComponent()
-        newComponent.setStyle(chatStyle)
+        newComponent.style = chatStyle
 
-        replacement = newComponent
+        replacementComponent = newComponent
     }
 
-    fun replaceOnlyHoverEvent(hoverEvent: HoverEvent) {
-        if (!this::replacement.isInitialized) return
-
-        // Initialise new component
-        val newComponent = replacement.unformattedTextForChatCompat().asComponent {
-            style = replacement.style
-            style.withHoverEvent(hoverEvent)
-        }
-
-        replacement = newComponent
+    fun replaceHoverEventComponent(component: Component) {
+        replacementComponent = component
     }
 
-    fun getReplacementAsIChatComponent(): Component {
-        if (!this::replacement.isInitialized) {
-            // Return an extremely basic chat component as to not error downstream
-            return "Original component was not set".asComponent()
+    @JvmStatic
+    fun getReplacement(): Component {
+        return replacementComponent ?: "No replacement component was set".asComponent()
+    }
+
+    // Required for Java interop with Operation<Void>
+    @Suppress("ForbiddenVoid")
+    @JvmStatic
+    fun wrapChatRender(
+        original: Operation<Void>,
+        chatGraphicsAccess: ChatComponent.ChatGraphicsAccess,
+        screenHeight: Int,
+        ticks: Int,
+        displayMode: ChatComponent.DisplayMode,
+    ) {
+        ChromaFontManager.renderingChat = true
+        ModifyVisualWords.changeWords = false
+        try {
+            original.call(chatGraphicsAccess, screenHeight, ticks, displayMode)
+        } catch (e: Throwable) {
+            ErrorManager.logErrorWithData(e, "Error in chat rendering")
+        } finally {
+            ChromaFontManager.renderingChat = false
+            ModifyVisualWords.changeWords = true
         }
-        return replacement
     }
 }

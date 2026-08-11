@@ -24,6 +24,7 @@ import at.hannibal2.skyhanni.features.bingo.card.nextstephelper.steps.SkillLevel
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
 import at.hannibal2.skyhanni.utils.NumberUtil.formatInt
 import at.hannibal2.skyhanni.utils.NumberUtil.formatPercentage
@@ -31,7 +32,6 @@ import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.editCopy
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 
 @SkyHanniModule
@@ -162,7 +162,7 @@ object BingoNextStepHelper {
     private var nextMessageIsCrystal = false
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
 
         for (currentStep in currentSteps) {
@@ -196,7 +196,7 @@ object BingoNextStepHelper {
             if (step is ItemsStep) {
                 var totalCount = 0L
                 for ((itemName, multiplier) in step.variants) {
-                    val count = InventoryUtils.countItemsInLowerInventory { it.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor() == itemName }
+                    val count = InventoryUtils.countItemsInLowerInventory { it.cleanName == itemName }
                     totalCount += count * multiplier
                 }
                 if (step.amountHaving != totalCount) {

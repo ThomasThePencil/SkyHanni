@@ -3,10 +3,10 @@ package at.hannibal2.skyhanni.features.mining
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
-import at.hannibal2.skyhanni.data.ClickType
+import at.hannibal2.skyhanni.data.InteractClickType
 import at.hannibal2.skyhanni.data.IslandType
-import at.hannibal2.skyhanni.data.model.Graph
-import at.hannibal2.skyhanni.data.model.GraphNode
+import at.hannibal2.skyhanni.data.model.graph.Graph
+import at.hannibal2.skyhanni.data.model.graph.GraphNode
 import at.hannibal2.skyhanni.events.ConfigLoadEvent
 import at.hannibal2.skyhanni.events.GuiContainerEvent
 import at.hannibal2.skyhanni.events.InventoryCloseEvent
@@ -26,10 +26,9 @@ import at.hannibal2.skyhanni.utils.ColorUtils.toColor
 import at.hannibal2.skyhanni.utils.ConditionalUtils.onToggle
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.GraphUtils
-import at.hannibal2.skyhanni.utils.GraphUtils.getNearestNode
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
-import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.getLoreComponent
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
 import at.hannibal2.skyhanni.utils.KeyboardManager.LEFT_MOUSE
 import at.hannibal2.skyhanni.utils.KeyboardManager.RIGHT_MOUSE
@@ -50,6 +49,7 @@ import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.filterNotNullKeys
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.draw3DPathWithWaypoint
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawDynamicText
 import at.hannibal2.skyhanni.utils.renderables.Renderable
@@ -59,7 +59,6 @@ import at.hannibal2.skyhanni.utils.renderables.primitives.emptyText
 import at.hannibal2.skyhanni.utils.renderables.primitives.placeholder
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.client.Minecraft
 import java.awt.Color
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
@@ -121,29 +120,28 @@ object TunnelsMaps {
 
     // <editor-fold desc="Patterns">
     /**
-     * REGEX-TEST: §9Glacite Collector
+     * REGEX-TEST: Glacite Collector
      */
     private val collectorCommissionPattern by RepoPattern.pattern(
-        "mining.commisson.collector",
-        "§9(?<what>\\w+(?: \\w+)?) Collector",
+        "mining.commisson.collector.colorless",
+        "(?<what>\\w+(?: \\w+)?) Collector",
     )
 
     /**
-     * REGEX-TEST: §7- §b277 Glacite Powder
-     * REGEX-TEST: §7- §b1,010 Glacite Powder
+     * REGEX-TEST: - 277 Glacite Powder
+     * REGEX-TEST: - 1,010 Glacite Powder
      */
     private val glacitePattern by RepoPattern.pattern(
-        "mining.commisson.reward.glacite",
-        "§7- §b[\\d,]+ Glacite Powder",
+        "mining.commisson.reward.glacite.colorless",
+        "- [\\d,]+ Glacite Powder",
     )
-
     private val invalidGoalPattern by RepoPattern.pattern(
         "mining.commisson.collector.invalid",
         "Glacite|Scrap",
     )
     private val completedPattern by RepoPattern.pattern(
-        "mining.commisson.completed",
-        "§a§lCOMPLETED",
+        "mining.commisson.completed.colorless",
+        "COMPLETED",
     )
     private val commissionInvPattern by RepoPattern.pattern(
         "mining.commission.inventory",
@@ -178,7 +176,7 @@ object TunnelsMaps {
         clickTranslate = mapOf()
         if (!commissionInvPattern.matches(event.inventoryName)) return
         clickTranslate = event.inventoryItems.mapNotNull { (slotId, item) ->
-            val lore = item.getLore()
+            val lore = item.getLoreComponent().map { it.string.removeColor() }
             if (!glacitePattern.anyMatches(lore)) return@mapNotNull null
             if (completedPattern.anyMatches(lore)) return@mapNotNull null
             val type = collectorCommissionPattern.firstMatcher(lore) {
@@ -222,7 +220,7 @@ object TunnelsMaps {
         if (!isEnabled()) return
         event.slot ?: return
         clickTranslate[event.slot.containerSlot]?.let {
-            event.toolTip.add("§e§lRight Click §r§eto for Tunnel Maps.")
+            event.toolTip.add("§e§lRight Click §r§efor Tunnel Maps.")
         }
     }
 
@@ -238,7 +236,7 @@ object TunnelsMaps {
 
     @HandleEvent
     fun onRepoReload(event: RepositoryReloadEvent) {
-        graph = event.getConstant<Graph>("island_graphs/GLACITE_TUNNELS", gson = Graph.gson)
+        graph = event.getConstant<Graph>("island_graphs/GLACITE_TUNNELS")
         possibleLocations = graph.groupBy { it.name }.filterNotNullKeys().mapValues { (_, value) ->
             value
         }
@@ -414,7 +412,7 @@ object TunnelsMaps {
         val nodeDistance = first?.let { playerPosition.distance(it.position) } ?: 0.0
         if (first != null && second != null) {
             val direct = playerPosition.distance(second.position)
-            val firstPath = first.neighbours[second] ?: 0.0
+            val firstPath = first.neighbors[second] ?: 0.0
             val around = nodeDistance + firstPath
             if (direct < around) {
                 this.path = Graph(path.drop(1)) to (distance - firstPath + direct)
@@ -465,7 +463,7 @@ object TunnelsMaps {
             true,
             bezierPoint = 2.0,
             textSize = config.textSize.toDouble(),
-            showNodeNames = true,
+            showNodeNames = config.showLandmarks,
         )
         event.drawDynamicText(
             if (config.distanceFirst) {
@@ -488,7 +486,7 @@ object TunnelsMaps {
     @HandleEvent
     fun onKeyPress(event: KeyPressEvent) {
         if (!isEnabled()) return
-        if (Minecraft.getInstance().screen != null) return
+        if (MinecraftCompat.screen != null) return
         campfireKey(event)
         nextSpotKey(event)
     }
@@ -496,7 +494,7 @@ object TunnelsMaps {
     @HandleEvent
     fun onItemClick(event: ItemClickEvent) {
         if (!isEnabled() || !config.leftClickPigeon) return
-        if (event.clickType != ClickType.LEFT_CLICK) return
+        if (event.clickType != InteractClickType.LEFT_CLICK) return
         if (event.itemInHand?.getInternalNameOrNull() != ROYAL_PIGEON) return
         nextSpot()
     }
@@ -538,5 +536,7 @@ object TunnelsMaps {
 
     private val areas = setOf("Glacite Tunnels", "Dwarven Base Camp", "Great Glacite Lake", "Fossil Research Center")
 
-    private fun isEnabled() = IslandType.DWARVEN_MINES.isCurrent() && config.enable && SkyBlockUtils.graphArea in areas
+    private fun isEnabled() =
+        IslandType.DWARVEN_MINES.isInIsland() && config.enable &&
+            (SkyBlockUtils.graphArea in areas || SkyBlockUtils.scoreboardArea in areas)
 }

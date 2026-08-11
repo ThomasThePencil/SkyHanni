@@ -10,14 +10,13 @@ import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorButton
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorText
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 
-class NeuRepositoryConfig : AbstractRepoConfig<NeuRepositoryConfig.NeuRepositoryLocation>() {
+class NeuRepositoryConfig : AbstractRepoConfig {
 
     @Expose
     @ConfigOption(
         name = "NEU Repo Auto Update",
-        desc = "Update the NEU repository on every startup and tries to auto fix bugs.\n" +
-            "§cOnly disable this if you know what you are doing!\n " +
-            "§eThis only works if NEU is not installed, if it is use their settings.",
+        desc = "Update the NEU repository on every startup and try to auto fix bugs.\n" +
+            "§cOnly disable this if you know what you are doing!",
     )
     @ConfigEditorBoolean
     override var repoAutoUpdate: Boolean = true
@@ -31,7 +30,7 @@ class NeuRepositoryConfig : AbstractRepoConfig<NeuRepositoryConfig.NeuRepository
     @Accordion
     override val location: NeuRepositoryLocation = NeuRepositoryLocation()
 
-    class NeuRepositoryLocation : AbstractRepoLocationConfig() {
+    class NeuRepositoryLocation : AbstractRepoLocationConfig {
         @ConfigOption(name = "Reset Repository Location", desc = "Reset your NEU repository location to the default.")
         @ConfigEditorButton(buttonText = "Reset")
         val resetRepoLocation: Runnable = Runnable { reset() }

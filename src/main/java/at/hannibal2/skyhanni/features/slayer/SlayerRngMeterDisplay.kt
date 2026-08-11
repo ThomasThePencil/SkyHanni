@@ -10,7 +10,6 @@ import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.NeuRepositoryReloadEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
-import at.hannibal2.skyhanni.events.slayer.SlayerChangeEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ChatUtils
@@ -31,8 +30,12 @@ import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.StringUtils.removeWordsAtEnd
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.nextAfter
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
+import at.hannibal2.skyhanni.utils.compat.withColor
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.ChatFormatting
 import kotlin.math.ceil
 import kotlin.time.Duration.Companion.seconds
 
@@ -86,12 +89,12 @@ object SlayerRngMeterDisplay {
     }
 
     @HandleEvent
-    fun onSlayerChange(event: SlayerChangeEvent) {
+    fun onSlayerChange() {
         update()
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
 
         if (config.hideChat && SlayerApi.isInCorrectArea) {
@@ -133,7 +136,7 @@ object SlayerRngMeterDisplay {
                 if (storage.goalNeeded == -1L) {
                     ErrorManager.logErrorStateWithData(
                         "Error Calculating Slayer RNG Meter",
-                        "gaol needed is -1, this should never be the case!",
+                        "goal needed is -1, this should never be the case!",
                         "goalNeeded" to storage.goalNeeded,
                         "currentMeter" to storage.currentMeter,
                         "gainPerBoss" to storage.gainPerBoss,
@@ -147,7 +150,15 @@ object SlayerRngMeterDisplay {
                         "timesUpdatedSinceLastDrop" to timesUpdatedSinceLastDrop,
                     )
                 }
-                ChatUtils.chat("§dRNG Meter §7dropped at §e$percentage §7XP ($from/$to§7)")
+                ChatUtils.chat(
+                    componentBuilder {
+                        appendWithColor("RNG Meter ", ChatFormatting.LIGHT_PURPLE)
+                        withColor(ChatFormatting.GRAY)
+                        append("dropped at ")
+                        appendWithColor("$percentage ", ChatFormatting.YELLOW)
+                        append("XP ($from/$to)")
+                    }
+                )
                 lastItemDroppedTime = SimpleTimeMark.now()
                 timesUpdatedSinceLastDrop = 0
             }

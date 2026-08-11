@@ -19,8 +19,10 @@ import kotlin.system.exitProcess
 @SkyHanniModule
 object PlatformUtils {
 
-    val MC_VERSION: String = net.minecraft.SharedConstants.getCurrentVersion().name
+    val MC_VERSION: String = net.minecraft.SharedConstants.getCurrentVersion().name()
 
+    @JvmStatic
+    @get:JvmName("isDevEnvironment")
     val isDevEnvironment: Boolean by lazy {
         FabricLoader.getInstance().isDevelopmentEnvironment
     }
@@ -35,7 +37,7 @@ object PlatformUtils {
         event.registerBrigadier("shmodlist") {
             description = "Get a Discord-formatted list of all loaded mods"
             category = CommandCategory.USERS_ACTIVE
-            callback {
+            simpleCallback {
                 val loadedMods = getLoadedMods().filter {
                     it.id in allowedFabricReports || !it.id.startsWith("fabric-")
                 }
@@ -50,7 +52,7 @@ object PlatformUtils {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Loaded Mods")
         event.addIrrelevant {
             getLoadedMods().forEach { (_, name, version, origin) ->

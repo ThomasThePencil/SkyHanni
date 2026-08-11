@@ -2,7 +2,6 @@ package at.hannibal2.skyhanni.features.event.carnival
 
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.data.HypixelData
 import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.ServerBlockChangeEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
@@ -15,26 +14,25 @@ import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderable
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
-import at.hannibal2.skyhanni.utils.compat.findHealthReal
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.findHealthReal
+import at.hannibal2.skyhanni.utils.compat.EntityCompat.getEntityHelmet
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
-import at.hannibal2.skyhanni.utils.compat.getEntityHelmet
 import at.hannibal2.skyhanni.utils.getLorenzVec
-import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.draw3DLine
+import at.hannibal2.skyhanni.utils.itemType
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawDynamicText
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawHitbox
+import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawLineToCrosshair
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawWaypointFilled
-import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.exactPlayerEyeLocation
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
 import at.hannibal2.skyhanni.utils.renderables.primitives.ItemStackRenderable.Companion.item
 import at.hannibal2.skyhanni.utils.renderables.primitives.empty
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.entity.monster.Zombie
+import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.item.Item
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
@@ -69,7 +67,7 @@ object CarnivalZombieShootout {
     )
 
     /**
-     * REGEX-TEST:                              Zombie Shootout
+     * WRAPPED-REGEX-TEST: "                             Zombie Shootout"
      */
     private val endPattern by patternGroup.pattern(
         "shootout.end",
@@ -85,7 +83,7 @@ object CarnivalZombieShootout {
 
     @HandleEvent
     fun onRenderWorld(event: SkyHanniRenderWorldEvent) {
-        if (!isEnabled() || (!config.coloredHitboxes && !config.coloredLines && !config.zombieTimer)) return
+        if (!isEnabled()) return
 
         if (config.zombieTimer) event.renderZombieTimer()
         if (config.coloredHitboxes) event.renderHitBoxes()
@@ -131,7 +129,6 @@ object CarnivalZombieShootout {
 
         for ((zombie, type) in drawZombies) {
             val entity = EntityUtils.getEntityByID(zombie.id) ?: continue
-            val isSmall = (entity as? Zombie)?.isBaby ?: false
 
             val boundingBox = entity.boundingBox
 
@@ -145,8 +142,7 @@ object CarnivalZombieShootout {
     }
 
     private fun SkyHanniRenderWorldEvent.renderLines() = lamp?.let {
-        draw3DLine(
-            exactPlayerEyeLocation(),
+        drawLineToCrosshair(
             it.pos.add(0.5, 0.5, 0.5),
             Color.RED,
             3,
@@ -154,8 +150,8 @@ object CarnivalZombieShootout {
         )
     }
 
-    @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    @HandleEvent(GuiRenderEvent.GuiOverlayRenderEvent::class)
+    fun onGuiRenderOverlay() {
         if (!isEnabled() || !config.lampTimer) return
 
         config.lampPosition.renderRenderable(content, posLabel = "Lantern Timer")
@@ -163,7 +159,7 @@ object CarnivalZombieShootout {
 
     @HandleEvent(ServerBlockChangeEvent::class)
     fun onBlockChange(event: ServerBlockChangeEvent) {
-        if (!isEnabled() || !started) return
+        if (!isEnabled()) return
 
         val blockOld = event.old
         val blockNew = event.new
@@ -179,10 +175,10 @@ object CarnivalZombieShootout {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
-        if (!config.enabled || HypixelData.skyBlockArea != "Carnival") return
+    fun onChat(event: SkyHanniChatEvent.Allow) {
+        if (!config.enabled || !CarnivalAPI.inCarnivalArea) return
 
-        val message = event.message.removeColor()
+        val message = event.cleanMessage
 
         if (startPattern.matches(message)) {
             started = true
@@ -193,7 +189,7 @@ object CarnivalZombieShootout {
 
     @HandleEvent
     fun onTick(event: SkyHanniTickEvent) {
-        if (!isEnabled() || (!config.coloredHitboxes && !config.zombieTimer && !config.lampTimer) || !event.isMod(2)) return
+        if (!isEnabled() || !event.isMod(2)) return
 
         if (config.coloredHitboxes || config.zombieTimer) {
             updateZombies()
@@ -225,7 +221,7 @@ object CarnivalZombieShootout {
     }
 
     private fun updateContent(time: SimpleTimeMark): Renderable {
-        val lamp = ItemStack(Blocks.REDSTONE_LAMP)
+        val lamp = SafeItemStack(Blocks.REDSTONE_LAMP)
         val timer = 6.seconds - time.passedSince()
         val prefix = determinePrefix(timer, 6.seconds, 4.seconds, 2.seconds)
 
@@ -238,17 +234,18 @@ object CarnivalZombieShootout {
     }
 
     private fun getZombies() =
-        EntityUtils.getEntitiesNextToPlayer<Zombie>(50.0).mapNotNull { zombie ->
+        EntityUtils.getEntitiesNearby<Zombie>(50.0).mapNotNull { zombie ->
             if (zombie.findHealthReal() <= 0) return@mapNotNull null
             val helmet = zombie.getEntityHelmet() ?: return@mapNotNull null
+            if (helmet.isEmpty) return@mapNotNull null
             val type = toType(helmet) ?: run {
                 ErrorManager.logErrorStateWithData(
                     "Could not identify Zombie Shootout type",
                     "zombie type for zombie entity helmet is null",
                     "helmet" to helmet,
                     "helmet.displayName" to helmet.hoverName.formattedTextCompatLeadingWhiteLessResets(),
-                    "helmet.item" to helmet.item,
-                    "helmet.unlocalizedName" to helmet.item.descriptionId,
+                    "helmet.item" to helmet.itemType,
+                    "helmet.unlocalizedName" to helmet.itemType.descriptionId,
                 )
                 return@mapNotNull null
             }
@@ -262,7 +259,7 @@ object CarnivalZombieShootout {
             else -> "§c"
         }
 
-    private fun toType(item: ItemStack) = ZombieType.entries.find { it.helmet == item.item }
+    private fun toType(item: SafeItemStack) = ZombieType.entries.find { item.`is`(it.helmet) }
 
-    private fun isEnabled() = config.enabled && HypixelData.skyBlockArea == "Carnival" && started
+    private fun isEnabled() = config.enabled && CarnivalAPI.inCarnivalArea && started
 }

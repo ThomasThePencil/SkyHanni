@@ -13,7 +13,7 @@ class OrderedWaypointsConfig {
 
     @ConfigOption(name = "Credits", desc = "This feature is from Coleweight and SoopyV2, huge thanks to them!")
     @ConfigEditorInfoText
-    var notice: String = ""
+    val notice: String = ""
 
     @Expose
     @ConfigOption(name = "Enable Ordered Waypoints", desc = "Enables ordered waypoints.")
@@ -125,4 +125,37 @@ class OrderedWaypointsConfig {
     @ConfigOption(name = "All Waypoint Color", desc = "Color used for waypoints when using show all mode.")
     @ConfigEditorColour
     var showAllWaypointColor: ChromaColour = ChromaColour.fromStaticRGB(0, 255, 0, 102)
+
+    @Expose
+    @ConfigOption(
+        name = "Auto Unload",
+        desc = "Automatically unloads route when changing Islands (Including Mineshafts)."
+    )
+    @ConfigEditorBoolean
+    var autoUnload: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Auto-Load Shaft Routes",
+        desc = "Automatically loads a matching route if found when entering a Mineshaft. " +
+            "(Format is from the scoreboard, e.g. JASP_1/PERI_C)"
+    )
+    @ConfigEditorBoolean
+    var autoLoadMatchingShaftRoute: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Auto unload Mineshaft",
+        desc = "Automatically unloads SHO route when leaving mineshafts."
+    )
+    @ConfigEditorBoolean
+    var autoUnloadWhenLeavingMineshaft: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "Auto-Skip Forward",
+        desc = "Automatically skip forward when reaching a waypoint further down in the route.",
+    )
+    @ConfigEditorBoolean
+    var autoSkipForward: Boolean = false
 }

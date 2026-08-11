@@ -1,6 +1,7 @@
 package at.hannibal2.skyhanni.features.misc
 
 import at.hannibal2.skyhanni.SkyHanniMod
+import at.hannibal2.skyhanni.SkyHanniMod.launch
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
@@ -8,8 +9,8 @@ import at.hannibal2.skyhanni.data.IslandGraphs
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.hypixel.chat.event.SystemMessageEvent
-import at.hannibal2.skyhanni.data.model.GraphNode
-import at.hannibal2.skyhanni.data.model.GraphNodeTag
+import at.hannibal2.skyhanni.data.model.graph.GraphNode
+import at.hannibal2.skyhanni.data.model.graph.GraphNodeTag
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.IslandGraphReloadEvent
@@ -19,7 +20,8 @@ import at.hannibal2.skyhanni.events.minecraft.WorldChangeEvent
 import at.hannibal2.skyhanni.features.misc.pathfind.NavigationFeedback
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
+import at.hannibal2.skyhanni.utils.ItemUtils.getLoreComponent
 import at.hannibal2.skyhanni.utils.LocationUtils
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzColor
@@ -30,11 +32,10 @@ import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.chat.TextHelper.send
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
+import at.hannibal2.skyhanni.utils.coroutines.CoroutineSettings
 import at.hannibal2.skyhanni.utils.navigation.NavigationUtils
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 
@@ -46,34 +47,36 @@ object FastFairySoulsPathfinder {
     // TODO this does not work with glacite tunnels, should prob use strings and add the same workaround we have for graph area
     // TODO also once this is fixed, add a chat message when finding the last soul in dwarven mines and have not yet found the souls in glacite tunnels
     private val foundSouls get() = ProfileStorageData.profileSpecific?.fairySouls?.found ?: mutableMapOf()
-    private val totalFound get() = ProfileStorageData.profileSpecific?.fairySouls?.totalFound ?: mutableMapOf()
+    private val totalFound get() = ProfileStorageData.profileSpecific?.fairySouls?.totalFound
+        ?: mutableMapOf()
 
     private var data: Data? = null
 
+    private val pathfindCoroutine = CoroutineSettings("fairy souls pathfind")
     private val patternGroup = RepoPattern.group("misc.fairy-souls")
 
     /**
-     * REGEX-TEST: §dYou have already found that Fairy Soul!
+     * REGEX-TEST: You have already found that Fairy Soul!
      */
     private val duplicatePattern by patternGroup.pattern(
-        "chat.duplicat",
-        "§dYou have already found that Fairy Soul!",
+        "chat.duplicate.colorless",
+        "^You have already found that Fairy Soul!$",
     )
 
     /**
-     * REGEX-TEST: §d§lSOUL! §fYou found a §r§dFairy Soul§r§f!
+     * REGEX-TEST: SOUL! You found a Fairy Soul!
      */
     private val newPattern by patternGroup.pattern(
-        "chat.new",
-        "§d§lSOUL! §fYou found a §r§dFairy Soul§r§f!",
+        "chat.new.colorless",
+        "^SOUL! You found a Fairy Soul!$",
     )
 
     /**
-     * REGEX-TEST: §7Fairy Souls: §e11§7/§d11
+     * REGEX-TEST: Fairy Souls: 11/11
      */
     private val loreSoulPattern by patternGroup.pattern(
-        "new",
-        "§7Fairy Souls: §e(?<have>.*)§7\\/§d(?<total>.*)",
+        "new.colorless",
+        "Fairy Souls: (?<found>.*)\\/(?<total>.*)",
     )
 
     private class Data(
@@ -96,13 +99,13 @@ object FastFairySoulsPathfinder {
 
         private fun getNearestSoul(): LorenzVec? {
             val playerLocation = LocationUtils.playerLocation()
-            val nearest = allSouls.minBy { it.distanceSq(playerLocation) }
+            val nearest = allSouls.minByOrNull { it.distanceSq(playerLocation) } ?: return null
             if (nearest.distanceToPlayer() < 10) return nearest
 
             val inAir = PlayerUtils.inAir()
             if (inAir) {
                 val abovePlayer = playerLocation.up(10)
-                val aboveNearest = allSouls.minBy { it.distanceSq(abovePlayer) }
+                val aboveNearest = allSouls.minByOrNull { it.distanceSq(abovePlayer) } ?: return null
                 if (aboveNearest.distance(abovePlayer) < 10) return aboveNearest
             }
 
@@ -211,17 +214,19 @@ object FastFairySoulsPathfinder {
         if (event.inventoryName != "Fairy Souls Guide") return
 
         for (stack in event.inventoryItems.values) {
-            val island = IslandType.getByNameOrNull(stack.hoverName.formattedTextCompatLeadingWhiteLessResets().removeColor()) ?: continue
-            val have = stack.getLore().firstOrNull()?.let {
-                loreSoulPattern.matchMatcher(it) {
-                    group("have").toIntOrNull()
+            val island = IslandType.getByNameOrNull(stack.cleanName) ?: continue
+            // The group is named "found" rather than "have", because "having" a fairy soul means trading it to Tia the Fairy for XP,
+            // which is distinct from finding it on an island.
+            val found = stack.getLoreComponent().firstOrNull()?.let {
+                loreSoulPattern.matchMatcher(it.string) {
+                    group("found").toIntOrNull()
                 }
             } ?: continue
 
-            if (island.isCurrent()) {
+            if (island.isInIsland()) {
                 data?.checkHaveAll()
             }
-            totalFound[island] = have
+            totalFound[island] = found
         }
     }
 
@@ -263,8 +268,8 @@ object FastFairySoulsPathfinder {
         calculatingStart = SimpleTimeMark.now()
         "§e[SkyHanni] Calculating Fairy Soul route §b0s".asComponent().send(calculatingMessageId)
 
-        SkyHanniMod.launchCoroutine("fairy souls pathfind") {
-            val route = NavigationUtils.getRoute(missingSouls, maxIterations = 300, neighborhoodSize = 50).toMutableList()
+        pathfindCoroutine.launch {
+            val route = NavigationUtils.getRouteLocations(missingSouls).toMutableList()
             val duration = calculatingStart.passedSince()
             "§e[SkyHanni] Calculated Fairy Soul route in §b${duration.format(showMilliSeconds = true)}".asComponent()
                 .send(calculatingMessageId)
@@ -292,30 +297,23 @@ object FastFairySoulsPathfinder {
     }
 
     @HandleEvent
-    fun onSystemMessage(event: SystemMessageEvent) {
-        if (duplicatePattern.matches(event.message) || newPattern.matches(event.message)) {
+    fun onSystemMessage(event: SystemMessageEvent.Allow) {
+        if (duplicatePattern.matches(event.cleanMessage) || newPattern.matches(event.cleanMessage)) {
             data?.foundNearby()
         }
     }
 
     @HandleEvent(IslandGraphReloadEvent::class)
     fun onIslandGraphReload() {
-        if (isEnabled()) {
-            reload()
-        } else {
-            data = null
-        }
+        if (isEnabled()) reload()
+        else data = null
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Fairy Souls Pathfinder")
 
-        if (!isEnabled()) {
-            event.addIrrelevant("disabled")
-            return
-        }
-
+        if (!isEnabled()) return event.addIrrelevant("disabled")
         event.addData {
             data?.apply {
                 debugState?.let {
@@ -340,20 +338,20 @@ object FastFairySoulsPathfinder {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shsoulsreset") {
+        event.registerBrigadier("shsoulsreset") {
             description = "Reset known Fairy Souls for the current island."
             category = CommandCategory.USERS_RESET
-            callback { onResetCommand() }
+            simpleCallback { onResetCommand() }
         }
-        event.register("shsoulsfoundall") {
+        event.registerBrigadier("shsoulsfoundall") {
             description = "Mark all Fairy Souls for the current island as found."
             category = CommandCategory.USERS_RESET
-            callback { onFoundAllCommand() }
+            simpleCallback { onFoundAllCommand() }
         }
-        event.register("shsoulsreloadpath") {
+        event.registerBrigadier("shsoulsreloadpath") {
             description = "Reload the Fairy Souls pathfinder."
             category = CommandCategory.DEVELOPER_TEST
-            callback { onReloadPathCommand() }
+            simpleCallback { onReloadPathCommand() }
         }
     }
 

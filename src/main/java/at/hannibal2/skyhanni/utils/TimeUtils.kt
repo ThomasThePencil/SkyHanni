@@ -5,13 +5,22 @@ import at.hannibal2.skyhanni.data.ScoreboardData
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
 import at.hannibal2.skyhanni.utils.RegexUtils.groupOrNull
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
+import at.hannibal2.skyhanni.utils.compat.formattedTextCompat
+import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.network.chat.Component
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.Month
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.time.temporal.WeekFields
+import java.util.Locale
 import java.util.regex.Matcher
 import kotlin.math.absoluteValue
+import kotlin.math.ceil
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -22,6 +31,7 @@ import kotlin.time.DurationUnit
 
 @Suppress("TooManyFunctions")
 object TimeUtils {
+    private val patternGroup = RepoPattern.group("timeutils")
 
     val isAprilFoolsDay: Boolean by RecalculatingValue(1.seconds) {
         val itsTime = LocalDate.now().let { it.month == Month.APRIL && it.dayOfMonth == 1 }
@@ -108,6 +118,31 @@ object TimeUtils {
 
     fun getDurationOrNull(string: String): Duration? = getMillis(string.preFixDurationString())
 
+
+    /**
+     * REGEX-TEST: 12:00 am
+     * REGEX-TEST: 11:59 pm
+     * REGEX-TEST: 12:41 am
+     */
+    private val skyblockTimePattern by patternGroup.pattern(
+        "24-hour-time",
+        "(?<hour>\\d+):(?<minute>\\d+)\\s*(?<period>am|pm)"
+    )
+
+    fun String.parse12HourTime(): Pair<Int, Int>? {
+        return skyblockTimePattern.matchMatcher(trim().lowercase()) {
+            var hour = group("hour").toInt()
+            val minute = group("minute").toInt()
+
+            when (group("period")) {
+                "pm" -> if (hour != 12) hour += 12
+                "am" -> if (hour == 12) hour = 0
+            }
+
+            hour to minute
+        }
+    }
+
     private fun getMillis(string: String) = UtilsPatterns.timeAmountPattern.matchMatcher(string.lowercase().trim()) {
         years("y") + days("d") + hours("h") + minutes("m") + seconds("s")
     } ?: tryAlternativeFormat(string)
@@ -165,11 +200,11 @@ object TimeUtils {
          */
         return ScoreboardData.tryToReplaceScoreboardLine(
             if (datePart.isNotEmpty() && timePart.isNotEmpty()) {
-                "$datePart, $timePart"
+                Component.literal("$datePart, $timePart")
             } else {
-                "$datePart$timePart".trim()
+                Component.literal("$datePart$timePart".trim())
             },
-        )
+        ).formattedTextCompat()
     }
 
     fun getCurrentLocalDate(): LocalDate = LocalDate.now(ZoneId.of("UTC"))
@@ -234,6 +269,29 @@ object TimeUtils {
         else -> false
     }
 
+    private val weekFields: WeekFields = WeekFields.of(Locale.getDefault())
+    val weekFormatter: DateTimeFormatter =
+        DateTimeFormatterBuilder()
+            .appendValue(ChronoField.YEAR)
+            .appendLiteral('-')
+            .appendValue(weekFields.weekOfYear())
+            .parseDefaulting(ChronoField.DAY_OF_WEEK, weekFields.firstDayOfWeek.value.toLong())
+            .toFormatter()
+
+    val monthFormatter: DateTimeFormatter =
+        DateTimeFormatterBuilder().appendPattern("yyyy'-'MM").parseDefaulting(ChronoField.DAY_OF_MONTH, 1).toFormatter()
+
+    val yearFormatter: DateTimeFormatter =
+        DateTimeFormatterBuilder().appendPattern("yyyy").parseDefaulting(ChronoField.DAY_OF_YEAR, 1).toFormatter()
+
+    val weekTextFormatter: DateTimeFormatter =
+        DateTimeFormatterBuilder()
+            .appendValue(ChronoField.YEAR)
+            .appendLiteral(", week ")
+            .appendValue(weekFields.weekOfYear())
+            .parseDefaulting(ChronoField.DAY_OF_WEEK, weekFields.firstDayOfWeek.value.toLong())
+            .toFormatter()
+
     private fun Matcher.years(string: String) = groupOrNull(string)?.toLong()?.years ?: 0.seconds
     private fun Matcher.days(string: String) = groupOrNull(string)?.toLong()?.days ?: 0.seconds
     private fun Matcher.hours(string: String) = groupOrNull(string)?.toLong()?.hours ?: 0.seconds
@@ -241,6 +299,14 @@ object TimeUtils {
     private fun Matcher.minutes(string: String) = minutesOrNull(string) ?: 0.seconds
     private fun Matcher.secondsOrNull(string: String) = groupOrNull(string)?.toLong()?.seconds
     private fun Matcher.seconds(string: String) = secondsOrNull(string) ?: 0.seconds
+
+    fun String.dayToLocalDate(): LocalDate = LocalDate.parse(this)
+
+    fun String.weekToLocalDate(): LocalDate = LocalDate.parse(this, weekFormatter)
+
+    fun String.monthToLocalDate(): LocalDate = LocalDate.parse(this, monthFormatter)
+
+    fun String.yearToLocalDate(): LocalDate = LocalDate.parse(this, yearFormatter)
 }
 
 private const val FACTOR_SECONDS = 1000L
@@ -276,9 +342,13 @@ enum class TimeUnit(val factor: Long, private val shortName: String, private val
     }
 }
 
+val Duration.inPartialMilliseconds: Double get() = toDouble(DurationUnit.MILLISECONDS)
 val Duration.inPartialSeconds: Double get() = toDouble(DurationUnit.SECONDS)
-val Duration.inPartialMinutes: Double get() = inPartialSeconds / 60
-val Duration.inPartialHours: Double get() = inPartialSeconds / 3600
-val Duration.inPartialDays: Double get() = inPartialSeconds / 86_400
-val Duration.inPartialYears: Double get() = inPartialSeconds / (86_400 * 365.25)
+val Duration.inPartialMinutes: Double get() = toDouble(DurationUnit.MINUTES)
+val Duration.inPartialHours: Double get() = toDouble(DurationUnit.HOURS)
+val Duration.inPartialDays: Double get() = toDouble(DurationUnit.DAYS)
+
+val Duration.roundedUpSeconds: Int get() = ceil(inPartialSeconds).toInt()
+
 val Long.years: Duration get() = this.times(365.25).days
+

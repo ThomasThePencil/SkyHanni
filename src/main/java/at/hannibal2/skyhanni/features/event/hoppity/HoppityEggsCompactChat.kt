@@ -40,7 +40,7 @@ object HoppityEggsCompactChat {
         hitmanCompactDataSets.clear()
     }
 
-    fun compactChat(event: SkyHanniChatEvent?, dataSet: HoppityStateDataSet) {
+    fun compactChat(event: SkyHanniChatEvent.Allow?, dataSet: HoppityStateDataSet) {
         if (!chatConfig.compact) return
         hoppityDataSet = dataSet.copy()
         event?.let { it.blockedReason = "compact_hoppity" }
@@ -68,7 +68,7 @@ object HoppityEggsCompactChat {
         val lockedValue = lockedHitmanClaimCount
         val storageValue = ProfileStorageData.profileSpecific?.chocolateFactory?.hitmanStats?.availableHitmanEggs
         val inventoryValue = if (InventoryUtils.openInventoryName() == "Claim All") {
-            InventoryUtils.getItemsInOpenChest().count { it.item.item == Items.PLAYER_HEAD }
+            InventoryUtils.getItemsInOpenChest().count { it.item.`is`(Items.PLAYER_HEAD) }
         } else null
         return lockedValue ?: storageValue ?: inventoryValue ?: 0
     }

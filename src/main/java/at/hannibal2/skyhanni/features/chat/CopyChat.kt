@@ -4,19 +4,23 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.features.misc.visualwords.ModifyVisualWords
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ChatUtils.chatMessage
-import at.hannibal2.skyhanni.utils.ChatUtils.fullComponent
 import at.hannibal2.skyhanni.utils.ClipboardUtils
 import at.hannibal2.skyhanni.utils.KeyboardManager
-import at.hannibal2.skyhanni.utils.ReflectionUtils.getDeclaredFieldOrNull
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.StringUtils.stripHypixelMessage
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.OrderedTextUtils
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompat
-import at.hannibal2.skyhanni.utils.system.PlatformUtils
-import net.minecraft.client.GuiMessage
 import net.minecraft.client.Minecraft
-import net.minecraft.util.Mth
+import net.minecraft.client.gui.ActiveTextCollector
+import net.minecraft.client.gui.Font
+import net.minecraft.client.gui.TextAlignment
+import net.minecraft.client.gui.components.ChatComponent
+import net.minecraft.client.multiplayer.chat.GuiMessage
+import net.minecraft.client.renderer.state.gui.GuiTextRenderState
+import net.minecraft.network.chat.Component
+import net.minecraft.util.FormattedCharSequence
+import org.joml.Matrix3x2f
 
 object CopyChat {
     private val config get() = SkyHanniMod.feature.chat.copyChat
@@ -32,23 +36,22 @@ object CopyChat {
     }
 
     private fun processCopyChat(mouseX: Int, mouseY: Int) {
-        // On 1.8 we use our own code to find the chat lines which uses our mouse methods, on 1.21 we use the vanilla methods
         val chatLine = getChatLine(mouseX, mouseY) ?: return
 
-        val formatted = chatLine.fullComponent.formattedTextCompat()
+        val formatted = chatLine.content.formattedTextCompat()
 
         val (clipboard, infoMessage) = when {
             KeyboardManager.isMenuKeyDown() ->
                 formatted.stripHypixelMessage() to "formatted message"
 
             KeyboardManager.isShiftKeyDown() -> (
-                OrderedTextUtils.orderedTextToLegacyString(ModifyVisualWords.transformText(chatLine.fullComponent.visualOrderText))
+                OrderedTextUtils.orderedTextToLegacyString(ModifyVisualWords.transformText(chatLine.content.visualOrderText))
                     .removeColor()
                 ) to "modified message"
 
-            KeyboardManager.isControlKeyDown() -> chatLine.chatMessage.removeColor() to "line"
+            KeyboardManager.isControlKeyDown() -> chatLine.content.string.removeColor() to "line"
 
-            else -> formatted.removeColor() to "message"
+            else -> chatLine.content.string.removeColor() to "message"
         }
 
         ClipboardUtils.copyToClipboard(clipboard)
@@ -56,42 +59,66 @@ object CopyChat {
     }
 
     private fun getChatLine(mouseX: Int, mouseY: Int): GuiMessage? {
-        val mc = Minecraft.getInstance() ?: return null
-        val chatGui = mc.gui.chat ?: return null
-        val chatLineY = chatGui.screenToChatY(mouseY.toDouble())
-        val chatLineX = chatGui.screenToChatX(mouseX.toDouble())
-        val lineIndex = (chatGui.chatScrollbarPos + chatLineY).toInt()
+        val mc = Minecraft.getInstance()
+        val chatGui = MinecraftCompat.hud.chat
+        val finder = HoveredTextFinder(mc.font, mouseX, mouseY)
+        chatGui.captureClickableText(finder, mc.window.guiScaledHeight, MinecraftCompat.hud.guiTicks, ChatComponent.DisplayMode.FOREGROUND)
+        val visibleLine = chatGui.trimmedMessages.firstOrNull { it.content === finder.hoveredText } ?: return null
 
-        if (chatLineX < -4.0 || chatLineX > Mth.floor(chatGui.width.toDouble() / chatGui.scale).toDouble()) return null
-
-        if (lineIndex < 0) return null
-        val visibleLines = chatGui.trimmedMessages
-        if (lineIndex > visibleLines.size) return null
-        val visibleLine = visibleLines[lineIndex]
-
-        val matchingLines = chatGui.allMessages.filter {
-            it.addedTime() == visibleLine.addedTime && it.content.formattedTextCompat().isNotBlank()
-        }
-
-        return when {
-            matchingLines.isEmpty() -> null
-            matchingLines.size == 1 -> matchingLines.first()
-            else -> {
-                matchingLines.firstOrNull {
-                    it.content.formattedTextCompat().stripHypixelMessage().removeColor()
-                        .contains(OrderedTextUtils.orderedTextToLegacyString(visibleLine.content).removeColor())
-                } ?: matchingLines.first()
-            }
-        }
+        return visibleLine.parent
     }
 
-    private val isPatcherLoaded by lazy { PlatformUtils.isModInstalled("patcher") }
+    private class HoveredTextFinder(
+        private val font: Font,
+        private val mouseX: Int,
+        private val mouseY: Int,
+    ) : ActiveTextCollector {
+        private var defaultParameters = ActiveTextCollector.Parameters(Matrix3x2f())
 
-    private fun getOffset(): Int {
-        if (!isPatcherLoaded) return 0
-        return runCatching {
-            val patcherConfigClass = Class.forName("club.sk1er.patcher.config.PatcherConfig")
-            if (patcherConfigClass.getDeclaredFieldOrNull("chatPosition")?.getBoolean(null) == true) 12 else 0
-        }.getOrDefault(0)
+        var hoveredText: FormattedCharSequence? = null
+            private set
+
+        override fun defaultParameters(): ActiveTextCollector.Parameters = defaultParameters
+
+        override fun defaultParameters(newParameters: ActiveTextCollector.Parameters) {
+            defaultParameters = newParameters
+        }
+
+        override fun accept(
+            alignment: TextAlignment,
+            anchorX: Int,
+            y: Int,
+            parameters: ActiveTextCollector.Parameters,
+            text: FormattedCharSequence,
+        ) {
+            val leftX = alignment.calculateLeft(anchorX, font, text)
+            val renderState = GuiTextRenderState(
+                font,
+                text,
+                parameters.pose(),
+                leftX,
+                y,
+                -1,
+                0,
+                true,
+                true,
+                parameters.scissor(),
+            )
+            ActiveTextCollector.findElementUnderCursor(renderState, mouseX.toFloat(), mouseY.toFloat()) {
+                hoveredText = text
+            }
+        }
+
+        override fun acceptScrolling(
+            message: Component,
+            centerX: Int,
+            left: Int,
+            right: Int,
+            top: Int,
+            bottom: Int,
+            parameters: ActiveTextCollector.Parameters,
+        ) {
+            defaultScrollingHelper(message, centerX, left, right, top, bottom, font.width(message), 9, parameters)
+        }
     }
 }

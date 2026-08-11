@@ -1,7 +1,6 @@
 package at.hannibal2.skyhanni.config.features.inventory.customwardrobe
 
 import at.hannibal2.skyhanni.config.FeatureToggle
-import at.hannibal2.skyhanni.config.OnlyModern
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
@@ -62,21 +61,18 @@ class CustomWardrobeConfig {
 
     @Expose
     @ConfigOption(name = "Show REI Items", desc = "Enables showing the REI item list from Firmament while in the custom wardrobe.")
-    @OnlyModern
     @ConfigEditorBoolean
     var showReiItems: Boolean = true
 
     @Expose
     @ConfigOption(name = "Colors", desc = "Change the color settings.")
     @Accordion
-    @Suppress("StorageVarOrVal")
-    var color: ColorConfig = ColorConfig()
+    val color: ColorConfig = ColorConfig()
 
     @Expose
     @ConfigOption(name = "Spacing", desc = "")
     @Accordion
-    @Suppress("StorageVarOrVal")
-    var spacing: SpacingConfig = SpacingConfig()
+    val spacing: SpacingConfig = SpacingConfig()
 
     @Expose
     @ConfigOption(name = "Keybinds", desc = "")

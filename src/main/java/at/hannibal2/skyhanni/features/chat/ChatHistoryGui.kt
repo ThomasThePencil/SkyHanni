@@ -5,7 +5,6 @@ import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.GuiRenderUtils
 import at.hannibal2.skyhanni.utils.KeyboardManager
 import at.hannibal2.skyhanni.utils.OSUtils
-import at.hannibal2.skyhanni.utils.StringUtils.splitLines
 import at.hannibal2.skyhanni.utils.StringUtils.stripHypixelMessage
 import at.hannibal2.skyhanni.utils.compat.DrawContextUtils
 import at.hannibal2.skyhanni.utils.compat.MouseCompat
@@ -15,7 +14,9 @@ import at.hannibal2.skyhanni.utils.compat.formattedTextCompat
 import at.hannibal2.skyhanni.utils.renderables.RenderableTooltips
 import at.hannibal2.skyhanni.utils.renderables.primitives.StringRenderable
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.components.ComponentRenderUtils
 import net.minecraft.network.chat.Component
+import net.minecraft.util.FormattedCharSequence
 
 class ChatHistoryGui(private val history: List<ChatManager.MessageFilteringResult>) : SkyHanniBaseScreen() {
 
@@ -35,67 +36,69 @@ class ChatHistoryGui(private val history: List<ChatManager.MessageFilteringResul
         history.sumOf { splitLine(it.message).size * 10 + (it.modified?.let { mod -> splitLine(mod).size * 10 } ?: 0) }
 
     // TODO use Renderables instead
-    override fun onDrawScreen(originalMouseX: Int, originalMouseY: Int, partialTicks: Float) {
-        drawDefaultBackground(originalMouseX, originalMouseY, partialTicks)
+    override fun onDrawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
+        drawDefaultBackground(mouseX, mouseY, partialTicks)
         var queuedTooltip: List<String>? = null
-        DrawContextUtils.pushMatrix()
         val l = (width / 2.0 - w / 2.0).toInt()
         val t = (height / 2.0 - h / 2.0).toInt()
-        DrawContextUtils.translate(l + 0.0, t + 0.0, 0.0)
-        GuiRenderUtils.drawFloatingRectDark(0, 0, w, h)
-        DrawContextUtils.translate(-l + 0.0, -t + 0.0, 0.0)
-        GuiRenderUtils.enableScissor(l + 5, t + 5, w + l - 5, h + t - 5)
-        DrawContextUtils.translate(l + 0.0, t + 0.0, 0.0)
-        DrawContextUtils.translate(5.0, 5.0 - scroll, 1.0)
-        val mouseX = originalMouseX - l
-        val isMouseButtonDown = mouseX in 0..w && originalMouseY in t..(t + h) && MouseCompat.isButtonDown(0)
-        var mouseY = originalMouseY - (t - scroll).toInt() - 5
 
-        for (msg in history) {
-            val messageLines = splitLine(msg.message)
-            val modifiedLines = msg.modified?.let { splitLine(it) }.orEmpty()
-            val size = messageLines.size + modifiedLines.size
+        DrawContextUtils.translatedPushPopResult(x = l.toDouble(), y = t.toDouble()) {
+            GuiRenderUtils.drawFloatingRectDark(0, 0, w, h)
+            DrawContextUtils.translate(-l + 0.0, -t + 0.0)
+            GuiRenderUtils.enableScissor(l + 5, t + 5, w + l - 5, h + t - 5)
+            DrawContextUtils.translate(l + 0.0, t + 0.0)
+            DrawContextUtils.translate(5.0, 5.0 - scroll)
+            val offsetMouseX = mouseX - l
+            val isMouseButtonDown = offsetMouseX in 0..w && mouseY in t..(t + h) && MouseCompat.isButtonDown(0)
+            var offsetMouseY = mouseY - (t - scroll).toInt() - 5
 
-            val isHovered = mouseX in 0..w && mouseY in 0..<(size * 10) && originalMouseY >= t + 5
+            for (msg in history) {
+                val messageLines = splitLine(msg.message)
+                val modifiedLines = msg.modified?.let { splitLine(it) }.orEmpty()
+                val size = messageLines.size + modifiedLines.size
 
-            if (isHovered) {
-                GuiRenderUtils.drawRect(0, -2, w, size * 10, 0x20FFFFFF)
-            }
+                val isHovered = offsetMouseX in 0..w && offsetMouseY in 0..<(size * 10) && mouseY >= t + 5
 
-            GuiRenderUtils.drawString(msg.actionKind.renderedString, 0, 0, -1)
-            msg.getReason()?.let {
-                GuiRenderUtils.drawString(it, ChatManager.ActionKind.maxLength + 5, 0, -1)
-            }
-            drawMultipleTextLines(messageLines, ChatManager.ActionKind.maxLength + reasonMaxLength + 10)
-            msg.modified?.let {
-                GuiRenderUtils.drawString("§e§lNEW TEXT", 0, 0, -1)
-                drawMultipleTextLines(modifiedLines, ChatManager.ActionKind.maxLength + reasonMaxLength + 10)
-            }
-
-            if (isHovered && msg.hoverInfo.isNotEmpty()) queuedTooltip = msg.hoverInfo
-            if (isHovered && KeyboardManager.isShiftKeyDown() && msg.hoverExtraInfo.isNotEmpty()) queuedTooltip = msg.hoverExtraInfo
-            if (isHovered && (isMouseButtonDown && !wasMouseButtonDown)) {
-                if (KeyboardManager.isShiftKeyDown()) {
-                    OSUtils.copyToClipboard(msg.message.convertToJsonString())
-                    ChatUtils.chat("Copied structured chat line to clipboard", false)
-                } else {
-                    val message = msg.message.formattedTextCompat().stripHypixelMessage()
-                    OSUtils.copyToClipboard(message)
-                    ChatUtils.chat("Copied chat line to clipboard")
+                if (isHovered) {
+                    GuiRenderUtils.drawRect(0, -2, w, size * 10, 0x20FFFFFF)
                 }
+
+                GuiRenderUtils.drawString(msg.actionKind.renderedString, 0, 0, -1)
+                msg.getReason()?.let {
+                    GuiRenderUtils.drawString(it, ChatManager.ActionKind.maxLength + 5, 0, -1)
+                }
+                drawMultipleTextLines(messageLines, ChatManager.ActionKind.maxLength + reasonMaxLength + 10)
+                msg.modified?.let {
+                    GuiRenderUtils.drawString("§e§lNEW TEXT", 0, 0, -1)
+                    drawMultipleTextLines(modifiedLines, ChatManager.ActionKind.maxLength + reasonMaxLength + 10)
+                }
+
+                if (isHovered && msg.hoverInfo.isNotEmpty()) queuedTooltip = msg.hoverInfo
+                if (isHovered && KeyboardManager.isShiftKeyDown() && msg.hoverExtraInfo.isNotEmpty()) queuedTooltip = msg.hoverExtraInfo
+                if (isHovered && (isMouseButtonDown && !wasMouseButtonDown)) {
+                    if (KeyboardManager.isShiftKeyDown()) {
+                        OSUtils.copyToClipboard(msg.message.convertToJsonString())
+                        ChatUtils.chat("Copied structured chat line to clipboard", false)
+                    } else {
+                        val message = msg.message.formattedTextCompat().stripHypixelMessage()
+                        OSUtils.copyToClipboard(message)
+                        ChatUtils.chat("Copied chat line to clipboard")
+                    }
+                }
+                offsetMouseY -= size * 10
             }
-            mouseY -= size * 10
+            GuiRenderUtils.disableScissor()
+            wasMouseButtonDown = isMouseButtonDown
         }
-        GuiRenderUtils.disableScissor()
-        wasMouseButtonDown = isMouseButtonDown
-        DrawContextUtils.popMatrix()
         queuedTooltip?.let { tooltip ->
             RenderableTooltips.setTooltipForRender(tooltip.map(StringRenderable::from))
         }
     }
 
-    private fun splitLine(comp: Component): List<String> {
-        return comp.formattedTextCompat().splitLines(w - (ChatManager.ActionKind.maxLength + reasonMaxLength + 10 + 10)).split("\n")
+    private fun splitLine(comp: Component): List<FormattedCharSequence> {
+        return ComponentRenderUtils.wrapComponents(
+            comp, w - (ChatManager.ActionKind.maxLength + reasonMaxLength + 10 + 10), Minecraft.getInstance().font
+        )
     }
 
     override fun onInitGui() {
@@ -108,10 +111,10 @@ class ChatHistoryGui(private val history: List<ChatManager.MessageFilteringResul
         this.scroll = newScroll.coerceAtMost(historySize - h + 10.0).coerceAtLeast(0.0)
     }
 
-    private fun drawMultipleTextLines(lines: List<String>, xPos: Int) {
+    private fun drawMultipleTextLines(lines: List<FormattedCharSequence>, xPos: Int) {
         for (line in lines) {
             GuiRenderUtils.drawString(line, xPos, 0, -1)
-            DrawContextUtils.translate(0f, 10f, 0f)
+            DrawContextUtils.translate(0f, 10f)
         }
     }
 

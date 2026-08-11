@@ -4,9 +4,12 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.EntityMovementData
 import at.hannibal2.skyhanni.data.IslandGraphs
+import at.hannibal2.skyhanni.data.IslandGraphs.pathFind
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.ProfileStorageData
+import at.hannibal2.skyhanni.data.effect.EffectApi
 import at.hannibal2.skyhanni.data.effect.NonGodPotEffect
+import at.hannibal2.skyhanni.data.model.graph.GraphNodeTag
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.GuiContainerEvent
 import at.hannibal2.skyhanni.events.MessageSendToServerEvent
@@ -18,7 +21,6 @@ import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.InventoryUtils
-import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
@@ -58,7 +60,7 @@ object CFBlockOpen {
     private var commandSentTimer = SimpleTimeMark.farPast()
 
     @HandleEvent
-    fun onEffectUpdate(event: EffectDurationChangeEvent) {
+    private fun onEffectUpdate(event: EffectDurationChangeEvent) {
         if (event.effect != NonGodPotEffect.HOT_CHOCOLATE || event.duration == null) return
         val chocolateFactory = profileStorage?.chocolateFactory ?: return
 
@@ -66,12 +68,17 @@ object CFBlockOpen {
             EffectDurationChangeType.ADD -> chocolateFactory.hotChocolateMixinExpiry + event.duration
             EffectDurationChangeType.REMOVE -> SimpleTimeMark.farPast()
             EffectDurationChangeType.SET -> SimpleTimeMark.now() + event.duration
+            EffectDurationChangeType.PARTIAL_SET ->
+                EffectApi.clampUsingPartialSet(
+                    chocolateFactory.hotChocolateMixinExpiry.timeUntil(),
+                    event.duration,
+                ).let { SimpleTimeMark.now() + it }
         }
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onSlotClick(event: GuiContainerEvent.SlotClickEvent) {
-        val slotDisplayName = event.slot?.item?.hoverName.formattedTextCompatLeadingWhiteLessResets() ?: return
+    private fun onSlotClick(event: GuiContainerEvent.SlotClickEvent) {
+        val slotDisplayName = event.slot?.item?.hoverName.formattedTextCompatLeadingWhiteLessResets()
         if (!openCfItemPattern.matches(slotDisplayName)) return
         if (EnchantedClockHelper.enchantedClockPattern.matches(InventoryUtils.openInventoryName())) return
 
@@ -80,7 +87,7 @@ object CFBlockOpen {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onCommandSend(event: MessageSendToServerEvent) {
+    private fun onCommandSend(event: MessageSendToServerEvent) {
         if (!commandPattern.matches(event.message)) return
         if (commandSentTimer.passedSince() < 5.seconds) return
         if (SkyBlockUtils.isBingoProfile) return
@@ -120,7 +127,7 @@ object CFBlockOpen {
                     action = {
                         HypixelCommands.warp("hub")
                         EntityMovementData.onNextTeleport(IslandType.HUB) {
-                            IslandGraphs.pathFind(LorenzVec(-32.5, 71.0, -76.5), "§aBazaar", condition = { true })
+                            IslandGraphs.node("Bazaar", GraphNodeTag.NPC).pathFind("§aBazaar", condition = { true })
                         }
                     },
                 )

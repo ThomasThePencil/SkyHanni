@@ -23,7 +23,7 @@ object EasterEggWaypoints {
     private var isEgg: Boolean = false
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!config.allWaypoints && !config.allEntranceWaypoints) return
         if (!isEgg) return
 
@@ -64,6 +64,7 @@ object EasterEggWaypoints {
         val notFoundEggs = EasterEgg.entries.filter { !it.found }
         if (notFoundEggs.isEmpty()) return
         val nextEgg = notFoundEggs.minByOrNull { it.waypoint.distanceSqToPlayer() } ?: error("next easter egg is null")
+        if (IslandGraphs.currentIslandGraph == null) return
         closest = nextEgg
 
         IslandGraphs.pathFind(

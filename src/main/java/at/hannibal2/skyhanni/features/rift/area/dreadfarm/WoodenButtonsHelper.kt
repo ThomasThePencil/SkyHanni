@@ -1,11 +1,11 @@
 package at.hannibal2.skyhanni.features.rift.area.dreadfarm
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.data.ClickType
+import at.hannibal2.skyhanni.data.InteractClickType
 import at.hannibal2.skyhanni.data.IslandGraphs
 import at.hannibal2.skyhanni.data.jsonobjects.repo.RiftWoodenButtonsJson
-import at.hannibal2.skyhanni.data.model.GraphNode
-import at.hannibal2.skyhanni.data.model.GraphNodeTag
+import at.hannibal2.skyhanni.data.model.graph.GraphNode
+import at.hannibal2.skyhanni.data.model.graph.GraphNodeTag
 import at.hannibal2.skyhanni.events.BlockClickEvent
 import at.hannibal2.skyhanni.events.ItemClickEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
@@ -113,7 +113,7 @@ object WoodenButtonsHelper {
     @HandleEvent
     fun onItemClick(event: ItemClickEvent) {
         if (!checkButtons()) return
-        if (event.clickType != ClickType.RIGHT_CLICK) return
+        if (event.clickType != InteractClickType.RIGHT_CLICK) return
         if (!event.itemInHand.isBlowgun) return
         lastBlowgunFire = SimpleTimeMark.now()
     }
@@ -141,7 +141,7 @@ object WoodenButtonsHelper {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!checkButtons()) return
 
         buttonHitPattern.matchMatcher(event.message) {

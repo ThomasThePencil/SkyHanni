@@ -71,7 +71,7 @@ object HoppityRabbitTheFishChecker {
         if (!isEnabled() || !mealEggInventoryPattern.matches(event.inventoryName)) return
 
         rabbitTheFishIndex = event.inventoryItems.filter {
-            it.value.hoverName.formattedTextCompatLeadingWhiteLessResets().isNotEmpty() && it.key != 22
+            it.value.hoverName.string.isNotEmpty() && it.key != 22
         }.entries.firstOrNull {
             rabbitTheFishItemPattern.matches(it.value.hoverName.formattedTextCompatLeadingWhiteLessResets())
         }?.key
@@ -94,6 +94,11 @@ object HoppityRabbitTheFishChecker {
     fun onAttemptedInventoryClose(event: AttemptedInventoryCloseEvent) {
         if (!isEnabled() || rabbitTheFishIndex == null) return
         event.sendPreventClosureTitle()
+    }
+
+    @HandleEvent
+    fun onInventoryClose() {
+        rabbitTheFishIndex = null
     }
 
     private fun SkyHanniEvent.Cancellable.sendPreventClosureTitle() {

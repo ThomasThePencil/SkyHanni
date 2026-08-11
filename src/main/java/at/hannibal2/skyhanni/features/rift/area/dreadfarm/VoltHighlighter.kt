@@ -12,11 +12,12 @@ import at.hannibal2.skyhanni.utils.AllEntitiesGetter
 import at.hannibal2.skyhanni.utils.ColorUtils.toColor
 import at.hannibal2.skyhanni.utils.EntityUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.getSkullTexture
+import at.hannibal2.skyhanni.utils.LocationUtils.distanceSqToPlayer
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkullTextureHolder
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.editCopy
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.getStandHelmet
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawCylinderInWorld
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawDynamicText
@@ -25,7 +26,6 @@ import io.github.notenoughupdates.moulconfig.ChromaColour
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.decoration.ArmorStand
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -34,9 +34,9 @@ object VoltHighlighter {
 
     private val config get() = RiftApi.config.area.dreadfarm.voltCrux
 
-    private val VOLT_DOING_LIGHTNING by lazy { SkullTextureHolder.getTexture("VOLT_DOING_LIGHTNING") }
-    private val VOLT_FRIENDLY by lazy { SkullTextureHolder.getTexture("VOLT_FRIENDLY") }
-    private val VOLT_HOSTILE by lazy { SkullTextureHolder.getTexture("VOLT_HOSTILE") }
+    private val VOLT_DOING_LIGHTNING by SkullTextureHolder.texture("VOLT_DOING_LIGHTNING")
+    private val VOLT_FRIENDLY by SkullTextureHolder.texture("VOLT_FRIENDLY")
+    private val VOLT_HOSTILE by SkullTextureHolder.texture("VOLT_HOSTILE")
 
     private const val LIGHTNING_DISTANCE = 7F
     private val CHARGE_TIME = 12.seconds
@@ -45,9 +45,8 @@ object VoltHighlighter {
     @HandleEvent(onlyOnIsland = IslandType.THE_RIFT)
     fun onArmorChange(event: EntityEquipmentChangeEvent<Entity>) {
         if (!config.voltWarning) return
-        val player = MinecraftCompat.localPlayerOrNull ?: return
         if (event.isHead && getVoltState(event.entity) == VoltState.DOING_LIGHTNING &&
-            event.entity.position().distanceToSqr(player.position()) <= LIGHTNING_DISTANCE * LIGHTNING_DISTANCE
+            event.entity.distanceSqToPlayer() <= LIGHTNING_DISTANCE * LIGHTNING_DISTANCE
         ) {
             chargingSince = chargingSince.editCopy {
                 this[event.entity] = SimpleTimeMark.now()
@@ -62,7 +61,7 @@ object VoltHighlighter {
         for (entity in EntityUtils.getEntities<LivingEntity>()) {
             val state = getVoltState(entity).takeIf { it != VoltState.NO_VOLT } ?: continue
 
-            if (config.voltMoodMeter) RenderLivingEntityHelper.setEntityColorWithNoHurtTime(
+            if (config.voltMoodMeter) RenderLivingEntityHelper.setEntityColor(
                 entity,
                 state.color.toColor()
             ) { config.voltMoodMeter }
@@ -96,8 +95,9 @@ object VoltHighlighter {
         DOING_LIGHTNING(ChromaColour.fromStaticRGB(0, 0, 255, 128)),
     }
 
-    private fun getVoltState(itemStack: ItemStack): VoltState {
-        return when (itemStack.getSkullTexture()) {
+    private fun getVoltState(itemStack: SafeItemStack): VoltState {
+        val skullTexture = itemStack.getSkullTexture() ?: return VoltState.NO_VOLT
+        return when (skullTexture) {
             VOLT_DOING_LIGHTNING -> VoltState.DOING_LIGHTNING
             VOLT_FRIENDLY -> VoltState.FRIENDLY
             VOLT_HOSTILE -> VoltState.HOSTILE

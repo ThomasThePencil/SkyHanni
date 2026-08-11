@@ -10,7 +10,6 @@ import at.hannibal2.skyhanni.config.features.inventory.CakeTrackerConfig.CakeTra
 import at.hannibal2.skyhanni.config.storage.ProfileSpecificStorage.CakeData
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.events.GuiContainerEvent
-import at.hannibal2.skyhanni.events.GuiRenderEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
@@ -19,6 +18,7 @@ import at.hannibal2.skyhanni.utils.ConditionalUtils
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils.getUpperItems
+import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPrice
 import at.hannibal2.skyhanni.utils.KeyboardManager.LEFT_MOUSE
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
@@ -39,7 +39,6 @@ import at.hannibal2.skyhanni.utils.renderables.RenderableUtils.addRenderableButt
 import at.hannibal2.skyhanni.utils.renderables.ScrollValue
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import at.hannibal2.skyhanni.utils.tracker.SkyHanniTracker
 import io.github.notenoughupdates.moulconfig.ChromaColour
 import net.minecraft.world.inventory.ChestMenu
 import org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN
@@ -153,11 +152,11 @@ object CakeTracker {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shresetcaketracker") {
+        event.registerBrigadier("shresetcaketracker") {
             description = "Resets the New Year Cake Tracker"
             category = CommandCategory.USERS_RESET
-            callback {
-                val storage = storage ?: return@callback
+            simpleCallback {
+                val storage = storage ?: return@simpleCallback
                 storage.ownedCakes.clear()
                 recalculateMissingCakes()
                 ChatUtils.chat("New Year Cake tracker data reset")
@@ -166,7 +165,7 @@ object CakeTracker {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!config.enabled) return
         cakePurchasedPattern.matchMatcher(event.message) {
             val year = group("year").formatInt()
@@ -186,8 +185,8 @@ object CakeTracker {
         ) { invalidateCakeCache() }
     }
 
-    @HandleEvent(GuiRenderEvent.ChestGuiOverlayRenderEvent::class, onlyOnSkyblock = true)
-    fun onBackgroundDraw() {
+    @HandleEvent(onlyOnSkyblock = true)
+    fun onChestGuiRender() {
         if (!config.enabled) return
 
         val inInvWithCakes = inCakeInventory && knownCakesInCurrentInventory.any()
@@ -297,7 +296,7 @@ object CakeTracker {
     private fun getCakePrice(year: Int): Double {
         return cakePriceCache.getOrPut(year) {
             val cakeItem = "NEW_YEAR_CAKE+$year".toInternalName()
-            SkyHanniTracker.getPricePer(cakeItem)
+            cakeItem.getPrice(SkyHanniMod.feature.misc.tracker.priceSource)
         }
     }
 

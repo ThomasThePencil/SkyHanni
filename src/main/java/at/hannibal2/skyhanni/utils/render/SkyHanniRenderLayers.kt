@@ -1,165 +1,98 @@
 package at.hannibal2.skyhanni.utils.render
 
 import at.hannibal2.skyhanni.utils.render.layers.ChromaRenderLayer
-import net.minecraft.Util
-import net.minecraft.client.renderer.RenderStateShard
-import net.minecraft.client.renderer.RenderType
-import net.minecraft.client.renderer.RenderType.CompositeRenderType
-import net.minecraft.client.renderer.RenderType.CompositeState
-import net.minecraft.resources.ResourceLocation
-import net.minecraft.util.TriState
-import java.util.OptionalDouble
-import java.util.concurrent.ConcurrentHashMap
+import net.minecraft.client.renderer.rendertype.LayeringTransform
+import net.minecraft.client.renderer.rendertype.RenderSetup
+import net.minecraft.client.renderer.rendertype.RenderType
+import net.minecraft.resources.Identifier
+import net.minecraft.util.Util
 
 object SkyHanniRenderLayers {
 
-    private val linesCache = ConcurrentHashMap<Int, CompositeRenderType>()
-    private val linesThroughWallsCache = ConcurrentHashMap<Int, CompositeRenderType>()
-
-    private val FILLED: CompositeRenderType = RenderType.create(
+    private val FILLED: RenderType = RenderType.create(
         "skyhanni_filled",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.FILLED(),
-        CompositeState.builder().setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING).createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.FILLED()).createRenderSetup(),
     )
 
-    private val FILLED_XRAY: CompositeRenderType = RenderType.create(
+    private val FILLED_XRAY: RenderType = RenderType.create(
         "skyhanni_filled_xray",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.FILLED_XRAY(),
-        CompositeState.builder().createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.FILLED_XRAY()).createRenderSetup(),
     )
 
-    private val TRIANGLES: CompositeRenderType = RenderType.create(
+    private val TRIANGLES: RenderType = RenderType.create(
         "skyhanni_triangles",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.TRIANGLES(),
-        CompositeState.builder().setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING).createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.TRIANGLES()).createRenderSetup(),
     )
 
-    private val TRIANGLES_XRAY: CompositeRenderType = RenderType.create(
+    private val TRIANGLES_XRAY: RenderType = RenderType.create(
         "skyhanni_triangles_xray",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.TRIANGLES_XRAY(),
-        CompositeState.builder().createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.TRIANGLES_XRAY()).createRenderSetup(),
     )
 
-    private val TRIANGLE_FAN: CompositeRenderType = RenderType.create(
+    private val TRIANGLE_FAN: RenderType = RenderType.create(
         "skyhanni_triangle_fan",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.TRIANGLE_FAN(),
-        CompositeState.builder().setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING).createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.TRIANGLE_FAN()).createRenderSetup(),
     )
 
-    private val TRIANGLE_FAN_XRAY: CompositeRenderType = RenderType.create(
+    private val TRIANGLE_FAN_XRAY: RenderType = RenderType.create(
         "skyhanni_triangle_fan_xray",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.TRIANGLE_FAN_XRAY(),
-        CompositeState.builder().createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.TRIANGLE_FAN_XRAY()).createRenderSetup(),
     )
 
-    private val QUADS: CompositeRenderType = RenderType.create(
+    private val QUADS: RenderType = RenderType.create(
         "skyhanni_quads",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.QUADS(),
-        CompositeState.builder().setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING).createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.QUADS()).createRenderSetup(),
     )
 
-    private val QUADS_XRAY: CompositeRenderType = RenderType.create(
+    private val QUADS_XRAY: RenderType = RenderType.create(
         "skyhanni_quads_xray",
-        RenderType.TRANSIENT_BUFFER_SIZE,
-        false,
-        true,
-        SkyHanniRenderPipeline.QUADS_XRAY(),
-        CompositeState.builder().createCompositeState(false),
+        RenderSetup.builder(SkyHanniRenderPipeline.QUADS_XRAY()).createRenderSetup(),
     )
 
-    private val CHROMA_STANDARD: CompositeRenderType = ChromaRenderLayer(
-        "skyhanni_standard_chroma",
-        RenderType.SMALL_BUFFER_SIZE,
-        false,
-        false,
-        SkyHanniRenderPipeline.CHROMA_STANDARD(),
-        CompositeState.builder().createCompositeState(false),
-    )
-
-    private val CHROMA_TEXTURED: java.util.function.Function<ResourceLocation, RenderType> = Util.memoize { texture ->
+    private val CHROMA_TEXTURED: java.util.function.Function<Identifier, RenderType> = Util.memoize { texture ->
         ChromaRenderLayer(
             "skyhanni_text_chroma",
-            RenderType.SMALL_BUFFER_SIZE,
-            false,
-            false,
-            SkyHanniRenderPipeline.CHROMA_TEXT(),
-            CompositeState.builder()
-                //#if MC < 1.21.6
-                .setTextureState(RenderStateShard.TextureStateShard(texture, TriState.FALSE, false))
-                //#else
-                //$$ .setTextureState(RenderStateShard.TextureStateShard(texture, false))
-                //#endif
-                .createCompositeState(false),
+            texture = texture,
         )
     }
 
-    private fun createLineRenderLayer(lineWidth: Double, throughWalls: Boolean): CompositeRenderType {
-        val pipeLine = if (throughWalls) SkyHanniRenderPipeline.LINES_XRAY() else SkyHanniRenderPipeline.LINES()
-        return RenderType.create(
-            "skyhanni_lines_${lineWidth}${if (throughWalls) "_xray" else ""}",
-            RenderType.TRANSIENT_BUFFER_SIZE,
-            false,
-            true,
-            pipeLine,
-            CompositeState.builder()
-                .setLineState(RenderStateShard.LineStateShard(OptionalDouble.of(lineWidth)))
-                .setLayeringState(if (throughWalls) RenderStateShard.NO_LAYERING else RenderStateShard.VIEW_OFFSET_Z_LAYERING)
-                .createCompositeState(false),
-        )
-    }
+    private val LINES: RenderType = RenderType.create(
+        "skyhanni_lines",
+        RenderSetup.builder(SkyHanniRenderPipeline.LINES())
+            .setLayeringTransform(LayeringTransform.VIEW_OFFSET_Z_LAYERING)
+            .createRenderSetup(),
+    )
 
-    fun getFilled(throughWalls: Boolean): CompositeRenderType {
+    private val LINES_XRAY: RenderType = RenderType.create(
+        "skyhanni_lines_xray",
+        RenderSetup.builder(SkyHanniRenderPipeline.LINES_XRAY())
+            .setLayeringTransform(LayeringTransform.NO_LAYERING)
+            .createRenderSetup(),
+    )
+
+    fun getFilled(throughWalls: Boolean): RenderType {
         return if (throughWalls) FILLED_XRAY else FILLED
     }
 
-    fun getTriangles(throughWalls: Boolean): CompositeRenderType {
+    fun getTriangles(throughWalls: Boolean): RenderType {
         return if (throughWalls) TRIANGLES_XRAY else TRIANGLES
     }
 
-    fun getTriangleFan(throughWalls: Boolean): CompositeRenderType {
+    fun getTriangleFan(throughWalls: Boolean): RenderType {
         return if (throughWalls) TRIANGLE_FAN_XRAY else TRIANGLE_FAN
     }
 
-    fun getQuads(throughWalls: Boolean): CompositeRenderType {
+    fun getQuads(throughWalls: Boolean): RenderType {
         return if (throughWalls) QUADS_XRAY else QUADS
     }
 
-    fun getLines(lineWidth: Double, throughWalls: Boolean): CompositeRenderType {
-        val cache = if (throughWalls) linesThroughWallsCache else linesCache
-        return cache.computeIfAbsent(lineWidth.hashCode()) {
-            createLineRenderLayer(lineWidth, throughWalls)
-        }
+    fun getLines(throughWalls: Boolean): RenderType {
+        return if (throughWalls) LINES_XRAY else LINES
     }
 
-    fun getChromaTexturedWithIdentifier(identifier: ResourceLocation) = CHROMA_TEXTURED.apply(identifier)
+    fun getChromaTexturedWithIdentifier(identifier: Identifier) = CHROMA_TEXTURED.apply(identifier)
 
-    //#if MC < 1.21.6
-    fun getChromaStandard() = CHROMA_STANDARD
-    fun getChromaTextured() = SkyHanniRenderLayers::getChromaTexturedWithIdentifier
-    //#else
-    //$$ fun getChromaStandard(): com.mojang.blaze3d.pipeline.RenderPipeline = SkyHanniRenderPipeline.CHROMA_STANDARD()
-    //$$ fun getChromaTextured(): com.mojang.blaze3d.pipeline.RenderPipeline = SkyHanniRenderPipeline.CHROMA_TEXT()
-    //#endif
+    fun getChromaStandard(): com.mojang.blaze3d.pipeline.RenderPipeline = SkyHanniRenderPipeline.CHROMA_STANDARD()
+    fun getChromaTextured(): com.mojang.blaze3d.pipeline.RenderPipeline = SkyHanniRenderPipeline.CHROMA_TEXT()
 
 }

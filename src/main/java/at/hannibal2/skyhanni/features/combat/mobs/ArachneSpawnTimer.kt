@@ -3,7 +3,7 @@ package at.hannibal2.skyhanni.features.combat.mobs
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.IslandType
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
@@ -11,7 +11,6 @@ import at.hannibal2.skyhanni.utils.LorenzVec
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
-import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawDynamicText
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
@@ -69,9 +68,9 @@ object ArachneSpawnTimer {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
-        val message = event.message.removeColor().lowercase()
+        val message = event.cleanMessage.lowercase()
 
         if (arachneFragmentPattern.matches(message) || arachneCrystalPattern.matches(message)) {
             if (arachneCrystalPattern.matches(message)) {
@@ -84,7 +83,7 @@ object ArachneSpawnTimer {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.SPIDER_DEN, priority = HandleEvent.LOW, receiveCancelled = true)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
+    fun onParticle(event: ParticleEvent) {
         if (!saveNextTickParticles) return
         if (searchTime.passedSince() < 3.seconds) return
 
@@ -108,5 +107,5 @@ object ArachneSpawnTimer {
     }
 
     fun isEnabled() =
-        IslandType.SPIDER_DEN.isCurrent() && SkyBlockUtils.graphArea == "Arachne's Sanctuary" && config.showArachneSpawnTimer
+        IslandType.SPIDER_DEN.isInIsland() && SkyBlockUtils.graphArea == "Arachne's Sanctuary" && config.showArachneSpawnTimer
 }

@@ -31,7 +31,7 @@ object HellionShieldHelper {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Hellion Shield")
         event.addIrrelevant {
             add("hellionShieldMobs: ${hellionShieldMobs.size}")
@@ -58,13 +58,13 @@ object HellionShieldHelper {
     fun Mob.setHellionShield(shield: HellionShield?) {
         shield?.let {
             hellionShieldMobs[this] = it
-            RenderLivingEntityHelper.setEntityColorWithNoHurtTime(
+            RenderLivingEntityHelper.setEntityColor(
                 this,
                 it.color.toColor().addAlpha(80),
             ) { SkyBlockUtils.inSkyBlock && SlayerApi.config.blazes.hellion.coloredMobs }
         } ?: run {
             hellionShieldMobs.remove(this)
-            RenderLivingEntityHelper.removeCustomRender(this)
+            RenderLivingEntityHelper.removeEntityColor(this)
         }
     }
 }

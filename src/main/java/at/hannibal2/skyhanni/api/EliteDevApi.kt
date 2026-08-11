@@ -1,22 +1,29 @@
 package at.hannibal2.skyhanni.api
 
-import at.hannibal2.skyhanni.SkyHanniMod
+import at.hannibal2.skyhanni.SkyHanniMod.launchCoroutine
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigManager
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
+import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierArguments
 import at.hannibal2.skyhanni.config.commands.brigadier.arguments.EnumArgumentType
+import at.hannibal2.skyhanni.data.garden.EliteFarmersLeaderboard
+import at.hannibal2.skyhanni.data.garden.FarmingWeightData
+import at.hannibal2.skyhanni.data.garden.FarmingWeightData.updateCollections
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteAuctionsResponse
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteBazaarResponse
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteContestsRequest
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteContestsResponse
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteFarmingContest
+import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteFeastData
+import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteFeastJson
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteItemResponse
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteLeaderboard
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteLeaderboardType
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.ElitePlayerWeightJson
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.EliteWeightsJson
 import at.hannibal2.skyhanni.data.jsonobjects.elitedev.WeightProfile
+import at.hannibal2.skyhanni.features.garden.leaderboarddisplays.EliteLeaderboards
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ChatUtils
@@ -27,8 +34,11 @@ import at.hannibal2.skyhanni.utils.api.ApiStaticPath
 import at.hannibal2.skyhanni.utils.api.ApiStaticPostPath
 import at.hannibal2.skyhanni.utils.api.ApiUtils
 import at.hannibal2.skyhanni.utils.api.JsonApiResponse
+import at.hannibal2.skyhanni.utils.coroutines.CoroutineSettings
 import at.hannibal2.skyhanni.utils.json.fromJson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlin.time.Duration.Companion.seconds
 
 @SkyHanniModule
 object EliteDevApi {
@@ -42,17 +52,56 @@ object EliteDevApi {
         override fun toString() = displayName
     }
 
+    private var spoofProfile = false
+    private var playerUuid = ""
+    private var playerProfile = ""
+
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
         event.registerBrigadier("shfetcheliteresource") {
-            description = "Fetches the specified Elite resource from elitebot.dev"
+            description = "Fetches the specified Elite resource from $ELITE_DOMAIN"
             category = CommandCategory.DEVELOPER_DEBUG
             argCallback("resource", EnumArgumentType.lowercase<EliteResourceType>()) { resource ->
-                SkyHanniMod.launchIOCoroutine("shfetcheliteresource command") {
+                CoroutineSettings("shfetcheliteresource command", 10.seconds).launchCoroutine {
                     fetchResourceCommand(resource)
                 }
             }
         }
+        event.registerBrigadier("shspoofweightprofile") {
+            description = "Set yourself to another player for the elite dev api"
+            category = CommandCategory.DEVELOPER_DEBUG
+            arg("uuid", BrigadierArguments.string()) { uuid ->
+                argCallback("profile", BrigadierArguments.string()) { profile ->
+                    spoofProfile(getArg(uuid), profile)
+                }
+            }
+            simpleCallback { resetProfile() }
+        }
+    }
+
+    private fun resetProfile() {
+        ChatUtils.chat("Reset weight profile to default!")
+        resetLeaderboardData()
+    }
+
+    private fun spoofProfile(uuid: String, profile: String) {
+        if (uuid.length <= 20) {
+            ChatUtils.userError("Invalid uuid!")
+            return
+        }
+        ChatUtils.chat("Setting uuid: $uuid, profile: $profile")
+        spoofProfile = true
+        playerUuid = uuid
+        playerProfile = profile
+        resetLeaderboardData()
+    }
+
+    private fun resetLeaderboardData() {
+        updateCollections(ignoreCooldown = true)
+        FarmingWeightData.reset()
+        EliteFarmersLeaderboard.reset()
+        EliteLeaderboards.resetDisplays()
+        EliteLeaderboards.updateDisplays()
     }
 
     private suspend fun fetchResourceCommand(resourceType: EliteResourceType) = runCatching {
@@ -72,34 +121,42 @@ object EliteDevApi {
         ChatUtils.chat("Failed to fetch $resourceType resources!")
     }
 
-    private const val ELITEBOT_API_URL = "https://api.elitebot.dev"
-    private const val FARMING_WEIGHT_API_NAME = "Elitebot Farming Weight"
-    private const val FARMING_WEIGHT_URL = "$ELITEBOT_API_URL/weight"
+    const val ELITE_DOMAIN = "eliteskyblock.com"
+
+    const val ELITE_URL = "https://$ELITE_DOMAIN"
+    const val ELITE_API_URL = "https://api.$ELITE_DOMAIN"
+    const val FARMING_WEIGHT_API_NAME = "EliteSkyBlock Farming Weight"
+    private const val FARMING_WEIGHT_URL = "$ELITE_API_URL/weight"
 
     private val contestStatic = ApiStaticPostPath(
-        "$ELITEBOT_API_URL/contests/at/now",
-        "Elitebot Farming Contests",
+        "$ELITE_API_URL/contests/at/now",
+        "EliteSkyBlock Farming Contests",
     )
 
-    private val apiWeightsStatic = ApiStaticPath(
-        "$ELITEBOT_API_URL/weights/all",
+    val apiWeightsStatic = ApiStaticPath(
+        "$ELITE_API_URL/weights/all",
         FARMING_WEIGHT_API_NAME,
     )
 
-    private const val WEIGHT_LEADERBOARD_API_NAME = "Elitebot Farming Weight Leaderboard"
-    private const val WEIGHT_LEADERBOARD_URL = "$ELITEBOT_API_URL/leaderboard/farmingweight"
+    private val feastStatic = ApiStaticPostPath(
+        "$ELITE_API_URL/harvest-feast/current",
+        "EliteSkyblock Harvest Feast Upload"
+    )
 
-    private const val RESOURCE_API_NAME = "Elitebot Resources"
-    private const val RESOURCE_API_URL = "$ELITEBOT_API_URL/resources"
+    private const val LEADERBOARD_URL = "$ELITE_API_URL/leaderboard/"
+    private const val LEADERBOARD_API_NAME = "EliteSkyBlock Leaderboard"
+
+    private const val RESOURCE_API_NAME = "EliteSkyBlock Resources"
+    private const val RESOURCE_API_URL = "$ELITE_API_URL/resources"
 
     // <editor-fold desc="Upcoming Contests">
-    suspend fun fetchUpcomingContests(): List<EliteFarmingContest>? {
+    suspend fun fetchUpcomingContests(): List<EliteFarmingContest> {
         val apiResponse = ApiUtils.getTypedJsonResponse<JsonObject>(contestStatic.toGet())
         val (_, apiData) = apiResponse.assertSuccessWithData() ?: ErrorManager.skyHanniError(
             "Failed to fetch upcoming contests. Please report this error if it continues to occur",
             "apiResponse" to apiResponse,
         )
-        val contestResponse = ConfigManager.Companion.gson.fromJson<EliteContestsResponse>(apiData)
+        val contestResponse = ConfigManager.gson.fromJson<EliteContestsResponse>(apiData)
         return contestResponse.responseContests
     }
 
@@ -113,30 +170,35 @@ object EliteDevApi {
     private var weightUrl = ""
     private var weightProfileApiResponse: JsonApiResponse<JsonObject>? = null
     suspend fun fetchWeightProfile(localProfile: String): WeightProfile? = try {
-        require(localProfile.isNotBlank()) { "Local profile cannot be blank" }
-
-        weightUrl = "$FARMING_WEIGHT_URL/${PlayerUtils.getUuid()}"
+        val profile = if (spoofProfile) playerProfile else localProfile
+        val uuid = if (spoofProfile) playerUuid else PlayerUtils.getUuid()
+        weightUrl = "$FARMING_WEIGHT_URL/$uuid?collections=true"
+        ChatUtils.debug("Fetching weight profile from $weightUrl")
         weightProfileApiResponse = ApiUtils.getTypedJsonResponse<JsonObject>(weightUrl, apiName = FARMING_WEIGHT_API_NAME)
         val (_, apiData) = weightProfileApiResponse?.assertSuccessWithData()
             ?: throw IllegalStateException("Response was not successful, or data was null")
 
         val weightData = ConfigManager.gson.fromJson<ElitePlayerWeightJson>(apiData)
         val selectedProfileId = weightData.selectedProfileId
-        val selectedProfileEntry = weightData.profiles.firstOrNull {
-            val idMatch = it.profileId == selectedProfileId
-            val nameMatch = it.profileName.lowercase() == localProfile.lowercase()
-            // Prioritize matching by ID, but also allow matching by name
-            (idMatch && nameMatch) || nameMatch
-        } ?: throw IllegalStateException(
-            "No profile found matching the local profile: $localProfile",
-        )
 
+        // Try to find by name first if localProfile is provided
+        val selectedProfileEntry = if (localProfile.isNotBlank()) {
+            weightData.profiles.firstOrNull {
+                it.profileName.equals(profile, ignoreCase = true)
+            }
+        } else {
+            null
+        } ?: weightData.profiles.firstOrNull {
+            it.profileId == selectedProfileId
+        } ?: throw IllegalStateException(
+            "No profile found matching the local profile: $profile",
+        )
         selectedProfileEntry
     } catch (e: Exception) {
         ErrorManager.logErrorWithData(
             e,
             "Error loading user farming weight\n" +
-                "§eLoading the farming weight data from elitebot.dev failed!\n" +
+                "§eLoading the farming weight data from $ELITE_DOMAIN failed!\n" +
                 "§eYou can re-enter the garden to try to fix the problem.\n" +
                 "§cIf this message repeats, please report it on Discord",
             "weightUrl" to weightUrl,
@@ -146,10 +208,10 @@ object EliteDevApi {
         null
     }
 
-    suspend fun fetchApiWeights(): EliteWeightsJson? {
+    suspend fun fetchApiWeights(): EliteWeightsJson {
         val apiWeightsResponse = ApiUtils.getTypedJsonResponse<JsonObject>(apiWeightsStatic.toGet())
         val (_, apiData) = apiWeightsResponse.assertSuccessWithData() ?: ErrorManager.skyHanniError(
-            "Error getting crop weights from elitebot.dev",
+            "Error getting crop weights from $ELITE_DOMAIN",
             "apiWeightsResponse" to apiWeightsResponse,
         )
         return ConfigManager.gson.fromJson<EliteWeightsJson>(apiData)
@@ -162,20 +224,24 @@ object EliteDevApi {
         lbType: EliteLeaderboardType,
         upcomingCount: Int? = null,
         atRank: Int? = null,
-    ): EliteLeaderboard? {
+        mode: String? = null,
+    ): EliteLeaderboard {
         require(profileId.isNotBlank()) { "Profile ID cannot be blank" }
-        val uuid = PlayerUtils.getUuid()
+        val uuid = if (spoofProfile) playerUuid else PlayerUtils.getUuid()
 
         val upcomingPlayersParam = upcomingCount?.let { "upcoming=$it" }
         val atRankParam = atRank?.let { "atRank=$it" }
-        val params = listOfNotNull(upcomingPlayersParam, atRankParam)
+        val previousPlayersParam = "previous=1"
+        val modeParam = mode?.let { "mode=$it" }
+        val params = listOfNotNull(upcomingPlayersParam, atRankParam, previousPlayersParam, modeParam)
         val paramString = if (params.isEmpty()) "" else {
             "?" + params.joinToString("&")
         }
-        val lbSuffix = lbType.suffix
-        val lbUrl = "$WEIGHT_LEADERBOARD_URL$lbSuffix/$uuid/$profileId$paramString"
+        val lbSuffix = lbType.lbName
+        val lbUrl = "$LEADERBOARD_URL$lbSuffix/$uuid/$profileId$paramString"
+        ChatUtils.debug("Fetching leaderboard information from $lbUrl")
 
-        val lbApiResponse = ApiUtils.getTypedJsonResponse<JsonObject>(lbUrl, apiName = WEIGHT_LEADERBOARD_API_NAME)
+        val lbApiResponse = ApiUtils.getTypedJsonResponse<JsonObject>(lbUrl, apiName = LEADERBOARD_API_NAME)
         val (_, apiData) = lbApiResponse.assertSuccessWithData() ?: ErrorManager.skyHanniError(
             "Error getting weight leaderboard position",
             "url" to lbUrl,
@@ -190,7 +256,7 @@ object EliteDevApi {
         val resourceUrl = "$RESOURCE_API_URL/$subUrl"
         val resourceApiResponse = ApiUtils.getTypedJsonResponse<JsonObject>(resourceUrl, apiName = RESOURCE_API_NAME)
         val (_, apiData) = resourceApiResponse.assertSuccessWithData() ?: ErrorManager.skyHanniError(
-            "Error getting resources from elitebot.dev",
+            "Error getting resources from $ELITE_DOMAIN",
             "resourceUrl" to resourceUrl,
             "resourceApiResponse" to resourceApiResponse,
         )
@@ -200,5 +266,21 @@ object EliteDevApi {
     private suspend fun fetchItemResources() = fetchResources<EliteItemResponse>("items")
     private suspend fun fetchAuctionResources() = fetchResources<EliteAuctionsResponse>("auctions")
     private suspend fun fetchBazaarResources() = fetchResources<EliteBazaarResponse>("bazaar")
+    // </editor-fold>
+
+    // <editor-fold desc="Harvest Feast">
+    suspend fun fetchHarvestFeastData(): EliteFeastData {
+        val res = ApiUtils.getTypedJsonResponse<JsonObject>(feastStatic.toGet())
+        val (_, apiData) = res.assertSuccessWithData() ?: ErrorManager.skyHanniError(
+            "Failed to fetch the next Harvest Feast data. Please report this error if it continues to occur",
+            "requestUrl" to feastStatic.toGet(),
+            "feastApiResponse" to res,
+        )
+        return ApiUtils.serializeNullsGson.fromJson<EliteFeastData>(apiData)
+    }
+
+    suspend fun submitHarvestFeast(postData: EliteFeastJson): JsonApiResponse<JsonElement> {
+        return ApiUtils.postJson(feastStatic, postData.getBody())
+    }
     // </editor-fold>
 }

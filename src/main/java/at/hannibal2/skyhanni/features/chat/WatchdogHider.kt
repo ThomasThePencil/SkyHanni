@@ -3,9 +3,9 @@ package at.hannibal2.skyhanni.features.chat
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
+import at.hannibal2.skyhanni.data.ChatManager
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
-import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ChatUtils.chatMessage
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import net.minecraft.network.chat.Component
@@ -22,7 +22,7 @@ object WatchdogHider {
     private const val END_LINE = "§c"
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!SkyBlockUtils.onHypixel || !SkyHanniMod.feature.chat.filterType.watchDog) return
 
         when (event.message) {
@@ -32,7 +32,7 @@ object WatchdogHider {
             }
 
             ANNOUNCEMENT_LINE -> {
-                ChatUtils.deleteMessage("watchdog") { it.chatMessage == START_LINE }
+                ChatManager.deleteMessage(reason = "watchdog") { it.chatMessage == START_LINE }
                 startLineComponent = null
                 inWatchdog = true
             }

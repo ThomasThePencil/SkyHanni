@@ -12,11 +12,12 @@ import at.hannibal2.skyhanni.utils.NeuItems.getItemStackOrNull
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
 import at.hannibal2.skyhanni.utils.PetUtils
 import at.hannibal2.skyhanni.utils.PetUtils.hasValidHigherTier
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils
-import at.hannibal2.skyhanni.utils.renderables.animated.ItemStackAnimationFrame
+import at.hannibal2.skyhanni.utils.renderables.animated.framed.ItemStackAnimatedFrame
 import com.google.gson.annotations.Expose
-import net.minecraft.world.item.ItemStack
 import java.util.UUID
+import kotlin.math.roundToInt
 
 data class PetDataStorage(
     @Expose val players: MutableMap<UUID, PlayerSpecific> = mutableMapOf(),
@@ -27,11 +28,11 @@ data class PetDataStorage(
     data class ProfileSpecific(
         @Expose val pets: MutableList<PetData> = mutableListOf(),
         @Expose val expSharePets: MutableList<UUID?> = mutableListOf(),
+        @Expose var beastmasterPetXpMultiplier: Double? = null,
     )
 }
 
 @KSerializable
-@Suppress("DEPRECATION")
 data class PetData(
     @Expose private val petInternalName: NeuInternalName, // The internal name of the pet, e.g., `RABBIT;5`
     @Expose var skinInternalName: NeuInternalName? = null, // The skin of the pet, e.g., `PET_SKIN_WOLF_DOGE`
@@ -41,12 +42,12 @@ data class PetData(
     @Expose val uuid: UUID? = null, // If this data is for a 'real' pet, this is the UUID of it
 ) {
     constructor(petInfo: SkyBlockItemModifierUtils.PetInfo) : this(
-        petInfo._internalName,
+        petInfo.let { "${it.type};${it.tier.id}".toInternalName() },
         petInfo.properSkinItem,
         petInfo.getSkinVariantIndex(),
         petInfo.heldItem,
         petInfo.exp,
-        petInfo.uniqueId
+        petInfo.ownedUuid
     )
 
     private val tierBoosted get() = heldItemInternalName == TIER_BOOST && petInternalName.hasValidHigherTier()
@@ -69,7 +70,7 @@ data class PetData(
         else -> {
             val xpDifference = nextLevelXp - currentLevelXp
             val xpProgress = (exp ?: 0.0) - currentLevelXp
-            xpProgress / xpDifference * 100
+            if (xpDifference <= 0.0) 0.0 else (xpProgress / xpDifference * 100).coerceIn(0.0, 100.0)
         }
     }
 
@@ -93,27 +94,26 @@ data class PetData(
         if (includeSkinTag && skinTag != null) append(" $skinTag")
     }
 
-    fun getItemStackOrNull(frameIndex: Int = 0): ItemStack? =
+    fun getItemStackOrNull(frameIndex: Int = 0): SafeItemStack? =
         getSkinItemStackOrNull(frameIndex) ?: petInternalName.getItemStackOrNull()
 
-    fun getAnimatedItemStackSequence(firstFrameOnly: Boolean = false): List<ItemStackAnimationFrame>? {
-        val baseStack = getSkinItemStackOrNull(0) ?: run {
-            return null
-        }
-        val firstFrame = ItemStackAnimationFrame(baseStack)
+    fun getAnimatedItemStackSequence(firstFrameOnly: Boolean = false, animationSpeed: Float = 1f): List<ItemStackAnimatedFrame>? {
+        val baseStack = getSkinItemStackOrNull(0) ?: return null
+        val firstFrame = ItemStackAnimatedFrame(baseStack)
         val animationJson = getAnimatedJsonOrNull()
-        if (firstFrameOnly || animationJson == null) {
+        if (firstFrameOnly || animationJson == null || animationSpeed <= 0f) {
             return listOf(firstFrame)
         }
+        val ticksPerFrame = (animationJson.ticks / animationSpeed).roundToInt().coerceAtLeast(1)
         return animationJson.textures.map {
-            ItemStackAnimationFrame(
+            ItemStackAnimatedFrame(
                 it.buildTextureItemStack(),
-                ticks = animationJson.ticks,
+                ticks = ticksPerFrame,
             )
         }
     }
 
-    private fun String.buildTextureItemStack(): ItemStack {
+    private fun String.buildTextureItemStack(): SafeItemStack {
         val (uuid, texture) = this.split(":")
         return ItemUtils.createSkull("Pet Skin", uuid, texture)
     }
@@ -123,7 +123,7 @@ data class PetData(
         return PetUtils.getAnimatedJsonOrNull(skinInternalName, skinVariantIndex)
     }
 
-    private fun getSkinItemStackOrNull(frameIndex: Int = 0): ItemStack? {
+    private fun getSkinItemStackOrNull(frameIndex: Int = 0): SafeItemStack? {
         val skinInternalName = skinInternalName ?: return null
         val baseItemStack = skinInternalName.getItemStackOrNull() ?: return null
         val animatedSkinJson = getAnimatedJsonOrNull()?.takeIf { it.textures.any() } ?: return baseItemStack

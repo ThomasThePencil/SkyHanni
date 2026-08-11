@@ -68,10 +68,11 @@ object HoppityEggsManager {
     /**
      * REGEX-TEST: §aYou bought §r§9Casanova §r§afor §r§6970,000 Coins§r§a!
      * REGEX-TEST: §aYou bought §r§fHeidie §r§afor §r§6194,000 Coins§r§a!
+     * REGEX-TEST: §aYou bought §r§aBubbles§r§a!
      */
     val eggBoughtPattern by CFApi.patternGroup.pattern(
         "egg.bought",
-        "§aYou bought §r(?<rabbitname>.*?) §r§afor §r§6(?<cost>[\\d,]*) Coins§r§a!",
+        "§aYou bought §r(?<rabbitname>.*?)(?: §r§afor §r§6(?<cost>[\\d,]*) Coins)?§r§a!",
     )
 
     /**
@@ -100,6 +101,14 @@ object HoppityEggsManager {
     val duplicateRabbitFound by CFApi.patternGroup.pattern(
         "rabbit.duplicate",
         "§7§lDUPLICATE RABBIT! §6\\+(?<amount>[\\d,]+) Chocolate",
+    )
+
+    /**
+     * REGEX-TEST: [NPC] Hoppity: Simply exquisite! I don't think I'll ever get tired of chocolate.
+     */
+    val hoppityVisitorAccepted by CFApi.patternGroup.pattern(
+        "hoppity.visitor.accepted",
+        "\\[NPC\\] Hoppity: Simply exquisite.+"
     )
 
     private val noEggsLeftPattern by CFApi.patternGroup.pattern(
@@ -133,28 +142,32 @@ object HoppityEggsManager {
     private var lastMeal: HoppityEggType? = null
     private var lastNote: String? = null
 
-    // has claimed all eggs at least once
+    // Prevents warnings from firing on unknown startup state before any claim or observed rollover.
     private var warningActive = false
     private var lastWarnTime = SimpleTimeMark.farPast()
+    private val observedSpawnedEggs = mutableSetOf<HoppityEggType>()
 
     private var latestWaypointOnclick: () -> Unit = {}
     private var syncedFromConfig: Boolean = false
 
     @HandleEvent(ProfileJoinEvent::class)
     fun onProfileJoin() {
+        warningActive = false
+        lastWarnTime = SimpleTimeMark.farPast()
+        observedSpawnedEggs.clear()
         if (!HoppityApi.isHoppityEvent()) return
         resettingEntries.forEach {
             val lastFound = profileStorage?.mealLastFound?.get(it) ?: SimpleTimeMark.farFuture()
             if (lastFound.isInPast()) it.markClaimed(lastFound)
 
             val nextSpawn = profileStorage?.mealNextSpawn?.get(it) ?: SimpleTimeMark.farFuture()
-            if (nextSpawn.isInPast() && it.hasRemainingSpawns() && !it.hasNotFirstSpawnedYet()) it.markSpawned()
+            if (nextSpawn.isInPast() && it.hasRemainingSpawns() && !it.hasNotFirstSpawnedYet()) markObservedSpawned(it)
         }
     }
 
     @HandleEvent
     fun onEggSpawned(event: EggSpawnedEvent) {
-        event.eggType.markSpawned(setLastReset = true)
+        markObservedSpawned(event.eggType, setLastReset = true)
     }
 
     @HandleEvent
@@ -169,9 +182,16 @@ object HoppityEggsManager {
         profileStorage?.mealNextSpawn?.filter {
             it.value.isInPast()
         }?.keys?.forEach {
-            if (HoppityApi.isHoppityEvent()) it.markSpawned()
+            if (HoppityApi.isHoppityEvent()) markObservedSpawned(it)
         }
         syncedFromConfig = true
+    }
+
+    private fun markObservedSpawned(eggType: HoppityEggType, setLastReset: Boolean = false) {
+        if (HoppityApi.isHoppityEvent() && eggType.isResetting) {
+            observedSpawnedEggs.add(eggType)
+        }
+        eggType.markSpawned(setLastReset)
     }
 
     @HandleEvent
@@ -183,7 +203,7 @@ object HoppityEggsManager {
         lastNote = event.note
     }
 
-    private fun SkyHanniChatEvent.sendNextEggAvailable() {
+    private fun SkyHanniChatEvent.Allow.sendNextEggAvailable() {
         val nextEgg = HoppityEggType.resettingEntries.minByOrNull { it.timeUntil } ?: return
         val currentYear = SkyBlockTime.now().year
         val spawnedEggs = HoppityEventSummary.getSpawnedEggCounts(currentYear).sumAllValues().toInt()
@@ -194,7 +214,7 @@ object HoppityEggsManager {
         blockedReason = "hoppity_egg"
     }
 
-    private fun SkyHanniChatEvent.sendNextHuntIn(
+    private fun SkyHanniChatEvent.Allow.sendNextHuntIn(
         reason: String = "Hoppity's Hunt is not active",
     ) {
         val currentYear = SkyBlockTime.now().year
@@ -204,7 +224,7 @@ object HoppityEggsManager {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         hoppityEventNotOn.matchMatcher(event.message) {
             if (!chatConfig.eggLocatorTimeInChat) return@matchMatcher
             return event.sendNextHuntIn()
@@ -273,7 +293,9 @@ object HoppityEggsManager {
 
     private fun checkWarn() {
         val allEggsRemaining = HoppityEggType.allEggsUnclaimed()
-        if (!warningActive) warningActive = !allEggsRemaining
+        if (!warningActive) {
+            warningActive = !allEggsRemaining || observedSpawnedEggs.containsAll(resettingEntries)
+        }
 
         if (warningActive && allEggsRemaining) warn()
     }
@@ -289,6 +311,7 @@ object HoppityEggsManager {
 
     private fun warn() {
         if (!unclaimedEggsConfig.warningsEnabled) return
+        if (SkyBlockUtils.isStrandedProfile) return
         if (ReminderUtils.isBusy() && !unclaimedEggsConfig.warnWhileBusy) return
         if (lastWarnTime.passedSince() < 1.minutes) return
 

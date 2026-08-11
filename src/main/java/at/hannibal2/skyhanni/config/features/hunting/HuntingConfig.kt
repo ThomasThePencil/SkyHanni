@@ -1,8 +1,8 @@
 package at.hannibal2.skyhanni.config.features.hunting
 
 import at.hannibal2.skyhanni.config.FeatureToggle
-import at.hannibal2.skyhanni.config.OnlyModern
 import at.hannibal2.skyhanni.config.core.config.Position
+import at.hannibal2.skyhanni.config.features.foraging.SafariConfig
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.Category
@@ -16,6 +16,10 @@ import org.lwjgl.glfw.GLFW
 class HuntingConfig {
 
     @Expose
+    @Category(name = "Safari", desc = "Settings for the safari")
+    val safari = SafariConfig()
+
+    @Expose
     @ConfigOption(name = "Shard Tracker", desc = "")
     @Accordion
     val shardTracker: ShardTrackerConfig = ShardTrackerConfig()
@@ -26,9 +30,8 @@ class HuntingConfig {
     val huntingProfitTracker: HuntingProfitTrackerConfig = HuntingProfitTrackerConfig()
 
     @Expose
-    @OnlyModern
     @Category(name = "Galatea Mob Highlights", desc = "Settings for Galatea mob highlights")
-    var mobHighlight = GalateaMobHighlightConfig()
+    val mobHighlight: GalateaMobHighlightConfig = GalateaMobHighlightConfig()
 
     @Expose
     @ConfigOption(name = "Lasso Display", desc = "Displays your lasso progress on screen.")
@@ -41,10 +44,10 @@ class HuntingConfig {
     val lassoDisplayPosition: Position = Position(380, 210)
 
     @Expose
-    @OnlyModern
-    @Category(name = "Fusion Keybinds", desc = "Settings for fusion keybinds")
+    @ConfigOption(name = "Fusion Keybinds", desc = "")
     @SearchTag("hunting box")
-    var fusionKeybinds = FusionKeybindsConfig()
+    @Accordion
+    val fusionKeybinds = FusionKeybindsConfig()
 
     @Expose
     @ConfigOption(
@@ -57,24 +60,24 @@ class HuntingConfig {
 
     @Expose
     @ConfigOption(
-        name = "Hideonleaf Finder",
-        desc = "Shows a route from your position to the nearest possibly spawn point for Hideonleaf for easy finding."
+        name = "Shulker Finder",
+        desc = "Shows a route from your position to the nearest possible spawn point for a Shulker for easy hunting.",
     )
+    @SearchTag("hideonleaf hideonsun")
     @ConfigEditorBoolean
     @FeatureToggle
-    var hideonleafFinder = false
+    var shulkerFinder = false
 
     @Expose
-    @OnlyModern
-    @ConfigOption(name = "Show next Hideonleaf", desc = "Press this key to show the next Hideonleaf.")
+    @ConfigOption(name = "Show next Shulker", desc = "Press this key to show the route to the next Shulker.")
+    @SearchTag("hideonleaf hideonsun")
     @ConfigEditorKeybind(defaultKey = GLFW.GLFW_KEY_UNKNOWN)
-    var nextHideonleafKeybind: Int = GLFW.GLFW_KEY_UNKNOWN
+    var nextShulkerKeybind: Int = GLFW.GLFW_KEY_UNKNOWN
 
     @Expose
     @ConfigOption(name = "Fusion Display", desc = "Displays the shard you are fusing and how many you have.")
     @ConfigEditorBoolean
     @FeatureToggle
-    @OnlyModern
     var fusionDisplay = true
 
     @Expose

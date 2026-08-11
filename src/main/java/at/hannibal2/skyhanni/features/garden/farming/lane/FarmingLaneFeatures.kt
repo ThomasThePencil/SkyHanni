@@ -142,6 +142,7 @@ object FarmingLaneFeatures {
                     duration = secondsBefore.seconds,
                     weight = 1.1,
                 )
+
                 else -> titleContext.takeIf { it?.alive == true }
             }
             if (lastPlaySound.passedSince() >= sound.repeatDuration.ticks) {
@@ -154,7 +155,7 @@ object FarmingLaneFeatures {
     private var sameSpeedCounter = 0
 
     private fun calculateSpeed(): Boolean {
-        val speed = MovementSpeedDisplay.speed.roundTo(2)
+        val speed = MovementSpeedDisplay.bpsMoveSpeed.roundTo(2)
         movementState = calculateMovementState(speed)
         if (movementState != MovementState.NORMAL) return false
 
@@ -212,7 +213,7 @@ object FarmingLaneFeatures {
     private fun LorenzVec.capAtBuildHeight(): LorenzVec = if (y > 76) copy(y = 76.0) else this
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!config.distanceDisplay) return
 
         config.distanceDisplayPosition.renderStrings(display, posLabel = "Lane Display")

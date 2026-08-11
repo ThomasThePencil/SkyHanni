@@ -41,7 +41,7 @@ object CFStats {
     }
 
     @HandleEvent
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (!CFApi.inChocolateFactory && !CFApi.chocolateFactoryPaused) return
         if (!config.statsDisplay) return
 
@@ -110,7 +110,7 @@ object CFStats {
     private fun SimpleTimeMark?.formatIfFuture(): String? = this?.takeIf { it.isInFuture() }?.timeUntil()?.format()
 
     private fun MutableMap<CFStat, String>.addHitman() {
-        val profileStorage = CFStats.profileStorage ?: return
+        val profileStorage = profileStorage ?: return
 
         val hitmanStats = profileStorage.hitmanStats
         val availableHitmanEggs = hitmanStats.availableHitmanEggs.takeIf { it > 0 }?.toString() ?: "§7None"

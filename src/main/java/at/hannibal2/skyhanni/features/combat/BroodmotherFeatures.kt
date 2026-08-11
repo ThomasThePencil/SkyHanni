@@ -11,18 +11,24 @@ import at.hannibal2.skyhanni.events.WidgetUpdateEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.HypixelCommands
-import at.hannibal2.skyhanni.utils.RenderUtils.renderString
+import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderable
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SoundUtils
-import at.hannibal2.skyhanni.utils.SoundUtils.playSound
 import at.hannibal2.skyhanni.utils.StringUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.TimeUtils.format
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
+import at.hannibal2.skyhanni.utils.renderables.Renderable
+import at.hannibal2.skyhanni.utils.renderables.primitives.text
+import net.minecraft.ChatFormatting
 import kotlin.reflect.KProperty0
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.DurationUnit
 
+// TODO clean this file up - there is a lot of state management that could utilize Resettable
+//  and other mechanisms to avoid the repetitive code.
 @SkyHanniModule
 object BroodmotherFeatures {
 
@@ -43,7 +49,7 @@ object BroodmotherFeatures {
     private var lastStage: StageEntry? = null
     private var currentStage: StageEntry? = null
     private var broodmotherSpawnTime = SimpleTimeMark.farPast()
-    private var display = ""
+    private var display: Renderable? = null
 
     @HandleEvent
     fun onWidgetUpdate(event: WidgetUpdateEvent) {
@@ -129,8 +135,16 @@ object BroodmotherFeatures {
     }
 
     private fun playImminentWarning() {
-        SoundUtils.repeatSound(100, 2, SoundUtils.createSound("note.pling", 0.5f))
-        ChatUtils.chat("The Broodmother is §4Imminent§e! It will spawn in §b60 seconds§e!")
+        SoundUtils.repeatSound(100, 2, SoundUtils.createSound("block.note_block.pling", 0.5f))
+        ChatUtils.chat(
+            componentBuilder {
+                append("The Broodmother is ")
+                appendWithColor("Imminent", ChatFormatting.DARK_RED)
+                append("! It will spawn in ")
+                appendWithColor("60 seconds", ChatFormatting.AQUA)
+                append("!")
+            },
+        )
     }
 
     private fun onBroodmotherSlain() {
@@ -145,18 +159,16 @@ object BroodmotherFeatures {
         broodmotherSpawnTime = SimpleTimeMark.farPast()
         lastStage = null
         currentStage = null
-        display = ""
+        display = null
     }
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
         if (!isCountdownEnabled()) return
-        if (display.isEmpty()) return
-        if (broodmotherSpawnTime.isInPast() && !broodmotherSpawnTime.isFarPast()) {
-            display = "§4Broodmother spawning now!"
-        }
-
-        config.countdownPosition.renderString(display, posLabel = "Broodmother Countdown")
+        val display = if (broodmotherSpawnTime.isInPast() && !broodmotherSpawnTime.isFarPast()) {
+            Renderable.text("§4Broodmother spawning now!")
+        } else display ?: return
+        config.countdownPosition.renderRenderable(display, posLabel = "Broodmother Countdown")
     }
 
     @HandleEvent
@@ -165,22 +177,15 @@ object BroodmotherFeatures {
 
         if (broodmotherSpawnTime.isFarPast()) {
             if (currentStage == StageEntry.ALIVE) {
-                display = "§4Broodmother spawned!"
+                display = Renderable.text("§4Broodmother spawned!")
             }
         } else {
             val countdown = broodmotherSpawnTime.timeUntil().format()
-            display = "§4Broodmother spawning in §b$countdown"
+            display = Renderable.text("§4Broodmother spawning in §b$countdown")
         }
     }
 
-    @JvmStatic
-    fun playTestSound() {
-        with(spawnAlertConfig) {
-            SoundUtils.createSound(alertSound, pitch).playSound()
-        }
-    }
-
-    private fun inSpidersDen() = IslandType.SPIDER_DEN.isCurrent()
+    private fun inSpidersDen() = IslandType.SPIDER_DEN.isInIsland()
     private fun isCountdownEnabled() = inSpidersDen() && config.countdown
     private fun isAliveMessageEnabled() = config.alertOnSpawn || config.stages.contains(StageEntry.ALIVE)
 }

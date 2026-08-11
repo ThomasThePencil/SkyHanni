@@ -15,11 +15,10 @@ object HoppityMuteEggSounds {
     private var lastInInventory: SimpleTimeMark = SimpleTimeMark.farPast()
     private val config get() = SkyHanniMod.feature.event.hoppityEggs
     private val eggInventory = InventoryDetector(
-        pattern = HoppityRabbitTheFishChecker.mealEggInventoryPattern,
         onCloseInventory = {
             lastInInventory = SimpleTimeMark.now()
         }
-    )
+    ) { HoppityRabbitTheFishChecker.mealEggInventoryPattern }
 
     @HandleEvent
     fun onPlaySound(event: PlaySoundEvent) {
@@ -28,7 +27,7 @@ object HoppityMuteEggSounds {
         when (config.soundMode) {
             HoppityEggsConfig.EggSoundMode.NO_MODIFICATION -> return
             HoppityEggsConfig.EggSoundMode.MUTE -> return event.cancel()
-            HoppityEggsConfig.EggSoundMode.REVERT -> return event.replaceWithOther("random.eat")
+            HoppityEggsConfig.EggSoundMode.REVERT -> return event.replaceWithOther("entity.generic.eat")
         }
     }
 

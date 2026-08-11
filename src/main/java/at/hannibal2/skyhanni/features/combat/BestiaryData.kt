@@ -5,12 +5,10 @@ import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.features.combat.BestiaryConfig.DisplayTypeEntry
 import at.hannibal2.skyhanni.config.features.combat.BestiaryConfig.NumberFormatEntry
-import at.hannibal2.skyhanni.events.GuiContainerEvent
-import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.InventoryCloseEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.getCleanLore
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.LorenzColor
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
@@ -20,10 +18,13 @@ import at.hannibal2.skyhanni.utils.NumberUtil.romanToDecimalIfNecessary
 import at.hannibal2.skyhanni.utils.NumberUtil.roundTo
 import at.hannibal2.skyhanni.utils.NumberUtil.shortFormat
 import at.hannibal2.skyhanni.utils.NumberUtil.toRoman
+import at.hannibal2.skyhanni.utils.RegexUtils.anyMatches
+import at.hannibal2.skyhanni.utils.RegexUtils.findMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils.highlight
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
@@ -31,7 +32,6 @@ import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessRes
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.RenderableUtils.addRenderableButton
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 
 @SkyHanniModule
@@ -77,9 +77,51 @@ object BestiaryData {
         "^(?:\\(\\d+\\/\\d+\\) )?(?<title>Bestiary|.+) ➜ .+\$",
     )
 
+    /**
+     * REGEX-TEST: Blobfish XIV
+     * REGEX-TEST: Cave Spider 5
+     */
+    private val mobLevelPattern by patternGroup.pattern(
+        "mob.level",
+        " (?<level>[IVX0-9]+)$",
+    )
+
+    /**
+     * REGEX-TEST: Kills: 1,234
+     * REGEX-TEST: Kills: 9,876,543
+     */
+    private val killsLinePattern by patternGroup.pattern(
+        "kills.line",
+        "^Kills: (?<kills>[0-9,.]+)",
+    )
+
+    /**
+     * WRAPPED-REGEX-TEST: "                    9/10"
+     */
+    private val progressBarLinePattern by patternGroup.pattern(
+        "progress.bar.line",
+        " {20}.*",
+    )
+
+    /**
+     * REGEX-TEST: You haven't unlocked this Family yet!
+     */
+    private val notUnlockedFamilyPattern by patternGroup.pattern(
+        "progress.not-unlocked-family",
+        "You haven't unlocked this Family yet!",
+    )
+
+    /**
+     * REGEX-TEST: Overall Progress: SHOWN
+     */
+    private val overallProgressShownPattern by patternGroup.pattern(
+        "progress.overall-shown",
+        "Overall Progress: SHOWN",
+    )
+
     private var display = emptyList<Renderable>()
     private val mobList = mutableListOf<BestiaryMob>()
-    private val stackList = mutableMapOf<Int, ItemStack>()
+    private val stackList = mutableMapOf<Int, SafeItemStack>()
     private val catList = mutableListOf<Category>()
     private var inInventory = false
     private var isCategory = false
@@ -90,9 +132,10 @@ object BestiaryData {
         28..34,
         37..43,
     ).flatten()
+    private const val OVERALL_PROGRESS_SLOT = 52
 
     @HandleEvent
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender() {
         if (!isEnabled()) return
         if (inInventory) {
             config.position.renderRenderables(
@@ -102,7 +145,7 @@ object BestiaryData {
     }
 
     @HandleEvent
-    fun onBackgroundDrawn(event: GuiContainerEvent.BackgroundDrawnEvent) {
+    fun onBackgroundDrawn() {
         if (!isEnabled() || !inInventory) return
         for (slot in InventoryUtils.getItemsInOpenChest()) {
             val lore = slot.item.getLore()
@@ -131,7 +174,7 @@ object BestiaryData {
     }
 
     @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
+    fun onInventoryClose() {
         mobList.clear()
         stackList.clear()
         inInventory = false
@@ -158,7 +201,7 @@ object BestiaryData {
 
     private fun inCategory() {
         for ((index, stack) in stackList) {
-            if (stack.hoverName.formattedTextCompatLeadingWhiteLessResets() == " ") continue
+            if (stack.hoverName.string == " ") continue
             if (!indexes.contains(index)) continue
             val name = stack.hoverName.formattedTextCompatLeadingWhiteLessResets()
             var familiesFound: Long = 0
@@ -180,42 +223,50 @@ object BestiaryData {
                     }
                 }
             }
+            if (totalFamilies == 0L) continue
             catList.add(Category(name, familiesFound, totalFamilies, familiesCompleted))
         }
     }
 
     private fun notInCategory() {
         for ((index, stack) in stackList) {
-            if (stack.hoverName.formattedTextCompatLeadingWhiteLessResets() == " ") continue
+            val hoverName = stack.hoverName.formattedTextCompatLeadingWhiteLessResets()
+            if (hoverName == " ") continue
             if (!indexes.contains(index)) continue
-            val name = " [IVX0-9]+$".toPattern().matcher(stack.hoverName.formattedTextCompatLeadingWhiteLessResets()).replaceFirst("")
-            val level = " ([IVX0-9]+$)".toRegex().find(stack.hoverName.formattedTextCompatLeadingWhiteLessResets())?.groupValues?.get(1) ?: "0"
+            val name = mobLevelPattern.matcher(hoverName).replaceFirst("")
+            val level = mobLevelPattern.findMatcher(hoverName) { group("level") } ?: "0"
             var totalKillToMax: Long = 0
             var currentTotalKill: Long = 0
             var totalKillToTier: Long = 0
             var currentKillToTier: Long = 0
             var actualRealTotalKill: Long = 0
+            var isUnlocked = true
             for ((lineIndex, line) in stack.getLore().withIndex()) {
                 val loreLine = line.removeColor()
-                if (loreLine.startsWith("Kills: ")) {
-                    actualRealTotalKill = "([0-9,.]+)".toRegex().find(loreLine)?.groupValues?.get(1)?.formatLong()
-                        ?: 0
+
+                if (notUnlockedFamilyPattern.matches(loreLine)) {
+                    isUnlocked = false
                 }
-                if (!loreLine.startsWith("                    ")) continue
+
+                killsLinePattern.findMatcher(loreLine) {
+                    actualRealTotalKill = group("kills").formatLong()
+                }
+                if (!progressBarLinePattern.matches(loreLine)) continue
                 val previousLine = stack.getLore()[lineIndex - 1]
                 val progress = loreLine.substring(loreLine.lastIndexOf(' ') + 1)
-                if (previousLine.contains("Progress to Tier")) {
+                if (tierProgressPattern.matches(previousLine)) {
                     progressPattern.matchMatcher(progress) {
                         totalKillToTier = group("needed").formatLong()
                         currentKillToTier = group("current").formatLong()
                     }
-                } else if (previousLine.contains("Overall Progress")) {
+                } else if (overallProgressPattern.matches(previousLine)) {
                     progressPattern.matchMatcher(progress) {
                         totalKillToMax = group("needed").formatLong()
                         currentTotalKill = group("current").formatLong()
                     }
                 }
             }
+            if (totalKillToMax == 0L && totalKillToTier == 0L && isUnlocked) continue
             mobList.add(
                 BestiaryMob(
                     name,
@@ -259,7 +310,6 @@ object BestiaryData {
             DisplayTypeEntry.HIGHEST_MAX -> mobList.sortedByDescending { it.killNeededToMax() }
             DisplayTypeEntry.LOWEST_NEXT -> mobList.sortedBy { it.killNeededToNextLevel() }
             DisplayTypeEntry.HIGHEST_NEXT -> mobList.sortedByDescending { it.killNeededToNextLevel() }
-            else -> mobList.sortedBy { it.actualRealTotalKill }
         }.toMutableList()
         return sortedMobList
     }
@@ -278,7 +328,7 @@ object BestiaryData {
             if (isMaxed && config.hideMaxed) continue
             val text = getMobLine(mob, isMaxed)
             val tips = getMobHover(mob)
-            add(Renderable.hoverTips(text, tips) { true })
+            add(Renderable.hoverTips(text, tips))
         }
     }
 
@@ -310,12 +360,10 @@ object BestiaryData {
                     val currentKill = when (type) {
                         DisplayTypeEntry.GLOBAL_MAX -> mob.totalKills
                         DisplayTypeEntry.GLOBAL_NEXT -> mob.currentKillToNextLevel
-                        else -> 0
                     }
                     val killNeeded = when (type) {
                         DisplayTypeEntry.GLOBAL_MAX -> mob.killToMax
                         DisplayTypeEntry.GLOBAL_NEXT -> mob.killNeededForNextLevel
-                        else -> 0
                     }
                     val percentage = ((currentKill.toDouble() / killNeeded) * 100).roundTo(2)
                     val suffix = if (type == DisplayTypeEntry.GLOBAL_NEXT) "§ato level ${mob.getNextLevel()}" else ""
@@ -333,8 +381,6 @@ object BestiaryData {
                 DisplayTypeEntry.LOWEST_NEXT, DisplayTypeEntry.HIGHEST_NEXT -> {
                     "§6${mob.killNeededToNextLevel().formatNumber()} §7kills needed"
                 }
-
-                else -> "§cYou are not supposed to see this, please report it to @HiZe on discord!"
             }
         }
         return text
@@ -398,9 +444,10 @@ object BestiaryData {
         }
     }
 
-    private fun isOverallProgressEnabled(inventoryItems: Map<Int, ItemStack>): Boolean {
-        if (inventoryItems[52]?.item == Items.ENDER_EYE) {
-            return inventoryItems[52]?.getLore()?.any { it == "§7Overall Progress: §aSHOWN" } == true
+    private fun isOverallProgressEnabled(inventoryItems: Map<Int, SafeItemStack>): Boolean {
+        val stack = inventoryItems[OVERALL_PROGRESS_SLOT]
+        if (stack?.item == Items.ENDER_EYE) {
+            return overallProgressShownPattern.anyMatches(stack.getCleanLore())
         }
 
         indexes.forEach { index ->
@@ -413,7 +460,7 @@ object BestiaryData {
         return true
     }
 
-    private fun isBestiaryGui(stack: ItemStack, name: String): Boolean {
+    private fun isBestiaryGui(stack: SafeItemStack, name: String): Boolean {
         val bestiaryGuiTitleMatcher = titlePattern.matcher(name)
         if (bestiaryGuiTitleMatcher.matches()) {
             if ("Bestiary" != bestiaryGuiTitleMatcher.group("title")) {
@@ -444,7 +491,6 @@ object BestiaryData {
     private fun Long.formatNumber(): String = when (config.numberFormat) {
         NumberFormatEntry.SHORT -> this.shortFormat()
         NumberFormatEntry.LONG -> this.addSeparators()
-        else -> "0"
     }
 
     data class Category(

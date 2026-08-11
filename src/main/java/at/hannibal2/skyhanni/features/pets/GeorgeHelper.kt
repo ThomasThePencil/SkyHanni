@@ -3,7 +3,7 @@ package at.hannibal2.skyhanni.features.pets
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.IslandType
-import at.hannibal2.skyhanni.events.GuiRenderEvent
+import at.hannibal2.skyhanni.features.commands.WikiManager
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.HypixelCommands
@@ -11,6 +11,7 @@ import at.hannibal2.skyhanni.utils.InventoryDetector
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPriceOrNull
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.takeUnlessEmpty
 import at.hannibal2.skyhanni.utils.LorenzRarity
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
@@ -29,37 +30,43 @@ import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 object GeorgeHelper {
 
     private val config get() = SkyHanniMod.feature.misc.pets.tamingSixty
-    private val useFandomWiki get() = SkyHanniMod.feature.misc.commands.betterWiki.useFandom
+    private val useIndependentWiki get() = SkyHanniMod.feature.misc.commands.betterWiki.useIndependent
     private const val SPAWN_EGG_SLOT = 41
 
     private val patternGroup = RepoPattern.group("george.taming-sixty")
 
     /**
-     * REGEX-TEST:   §dMythic Enderman
-     * REGEX-TEST:   §6Legendary Black Cat
-     * REGEX-TEST:   §5Epic Rift Ferret
-     * REGEX-TEST:   §5Epic Jellyfish
-     * REGEX-TEST:   §9Rare Frost Wisp
+     * WRAPPED-REGEX-TEST: "  §dMythic Enderman"
+     * WRAPPED-REGEX-TEST: "  §6Legendary Black Cat"
+     * WRAPPED-REGEX-TEST: "  §5Epic Rift Ferret"
+     * WRAPPED-REGEX-TEST: "  §5Epic Jellyfish"
+     * WRAPPED-REGEX-TEST: "  §9Rare Frost Wisp"
      */
     private val neededPetPattern by patternGroup.pattern(
         "needed-pet.loreline",
         "(?i) *(?<fullThing>(?<tierColorCodes>§.)*(?<tier>(?:un)?common|rare|epic|legendary|mythic) (?<pet>[\\S ]+))",
     )
 
+    /**
+     * REGEX-TEST: Offer Pets
+     */
+    private val offerPetsInventoryMenuPattern by patternGroup.pattern(
+        "offer-pets.inventory-menu",
+        "Offer Pets",
+    )
+
     init {
         InventoryDetector(
             onOpenInventory = { DelayedRun.runNextTick { checkInventoryItems() } },
-        ) { name ->
-            name == "Offer Pets"
-        }
+        ) { offerPetsInventoryMenuPattern }
     }
 
     private var display = emptyList<Renderable>()
 
     private fun checkInventoryItems() {
-        val items = InventoryUtils.getItemsAtSlots(SPAWN_EGG_SLOT)
+        val item = InventoryUtils.getItemAtSlotIndex(SPAWN_EGG_SLOT)?.takeUnlessEmpty() ?: return
 
-        constructDisplay(items[0].getLore())
+        constructDisplay(item.getLore())
     }
 
     private fun constructDisplay(lore: List<String>) {
@@ -103,18 +110,12 @@ object GeorgeHelper {
                 onLeftClick = { HypixelCommands.auctionSearch("] $petName") },
             )
         } else {
-            val selectedWiki = if (useFandomWiki) "Fandom" else "Hypixel"
+            val wiki = if (useIndependentWiki) WikiManager.data.unofficial else WikiManager.data.official
             Renderable.clickable(
-                text = " §7- $formattedPet: §cNo price found. §eSee the $selectedWiki Wiki.",
-                tips = listOf("§eView the $selectedWiki Wiki article for $formattedPet§e."),
+                text = " §7- $formattedPet: §cNo price found. §eSee the ${wiki.name}.",
+                tips = listOf("§eView the ${wiki.name} article for $formattedPet§e."),
                 onLeftClick = {
-                    val urlCompliantPet = formattedPet.removeColor().replace(" ", "%20")
-                    val petURL = if (useFandomWiki) {
-                        "https://hypixel-skyblock.fandom.com/wiki/Special:Search?query=$urlCompliantPet&scope=internal"
-                    } else {
-                        "https://wiki.hypixel.net/index.php?search=$urlCompliantPet"
-                    }
-                    OSUtils.openBrowser(petURL)
+                    OSUtils.openBrowser(WikiManager.getSearchUrl("$petName Pet", useIndependent = useIndependentWiki))
                 },
             )
         }
@@ -139,8 +140,8 @@ object GeorgeHelper {
         var renderableInfo: HorizontalContainerRenderable,
     )
 
-    @HandleEvent(GuiRenderEvent.ChestGuiOverlayRenderEvent::class, onlyOnIsland = IslandType.HUB)
-    fun onRenderOverlay() {
+    @HandleEvent(onlyOnIsland = IslandType.HUB)
+    fun onChestGuiRender() {
         if (!config.enabled) return
         if (display.isEmpty()) return
         config.position.renderRenderables(display, posLabel = "Taming 60 Helper")
@@ -154,4 +155,5 @@ object GeorgeHelper {
     private fun petInternalName(pet: String, tier: Int) = "$pet;$tier"
     private fun String.getPetPrice(otherRarity: Boolean = false): Double =
         this.toInternalName().getPriceOrNull() ?: if (otherRarity) Double.MAX_VALUE else -1.0
+
 }

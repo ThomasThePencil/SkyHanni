@@ -1,18 +1,16 @@
 package at.hannibal2.skyhanni.utils.compat
 
 import at.hannibal2.skyhanni.test.command.ErrorManager
-import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.world.item.ItemStack
-import org.joml.Matrix4f
-import org.joml.Quaternionf
-import java.nio.FloatBuffer
+import at.hannibal2.skyhanni.utils.SafeItemStack
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.renderer.state.gui.GuiElementRenderState
 
 /**
  * Utils methods related to DrawContext, also known on 1.8 as GLStateManager
  */
 object DrawContextUtils {
 
-    private var _drawContext: GuiGraphics? = null
+    private var _drawContext: GuiGraphicsExtractor? = null
 
     /**
      * This is used to track the depth of the render context stack.
@@ -22,15 +20,15 @@ object DrawContextUtils {
      */
     private var renderDepth = 0
 
-    val drawContext: GuiGraphics
+    val drawContext: GuiGraphicsExtractor
         get() = _drawContext ?: run {
             ErrorManager.crashInDevEnv("drawContext is null")
             ErrorManager.skyHanniError("drawContext is null")
         }
 
-    fun drawItem(item: ItemStack, x: Int, y: Int) = drawContext.renderItem(item, x, y)
+    fun drawItem(item: SafeItemStack, x: Int, y: Int) = drawContext.item(item, x, y)
 
-    fun setContext(context: GuiGraphics) {
+    fun setContext(context: GuiGraphicsExtractor) {
         renderDepth++
         if (_drawContext != null) {
             return
@@ -49,63 +47,26 @@ object DrawContextUtils {
         }
     }
 
-    fun translate(x: Double, y: Double, z: Double) {
-        //#if MC < 1.21.6
-        drawContext.pose().translate(x, y, z)
-        //#else
-        //$$ drawContext.pose().translate(x.toFloat(), y.toFloat())
-        //#endif
+    fun translate(x: Double, y: Double) {
+        drawContext.pose().translate(x.toFloat(), y.toFloat())
     }
 
-    fun translate(x: Float, y: Float, z: Float) {
-        //#if MC < 1.21.6
-        drawContext.pose().translate(x, y, z)
-        //#else
-        //$$ drawContext.pose().translate(x, y)
-        //#endif
+    fun translate(x: Float, y: Float) {
+        drawContext.pose().translate(x, y)
     }
 
-    fun rotate(angle: Float, x: Number, y: Number, z: Number) {
-        val (xf, yf, zf) = listOf(x, y, z).map { it.toFloat() }
-        //#if MC < 1.21.6
-        drawContext.pose().mulPose(Quaternionf().rotationAxis(angle, xf, yf, zf))
-        //#endif
-    }
-
-    fun multMatrix(buffer: FloatBuffer) {
-        //#if MC < 1.21.6
-        multMatrix(Matrix4f(buffer))
-        //#endif
-    }
-
-    //#if MC < 1.21.6
-    fun multMatrix(matrix: Matrix4f) = drawContext.pose().mulPose(matrix)
-    //#endif
-
-    fun scale(x: Float, y: Float, z: Float) {
-        //#if MC < 1.21.6
-        drawContext.pose().scale(x, y, z)
-        //#else
-        //$$ drawContext.pose().scale(x, y)
-        //#endif
+    fun scale(x: Float, y: Float) {
+        drawContext.pose().scale(x, y)
     }
 
     @Deprecated("Use pushPop instead")
     fun pushMatrix() {
-        //#if MC < 1.21.6
-        drawContext.pose().pushPose()
-        //#else
-        //$$ drawContext.pose().pushMatrix()
-        //#endif
+        drawContext.pose().pushMatrix()
     }
 
     @Deprecated("Use pushPop instead")
     fun popMatrix() {
-        //#if MC < 1.21.6
-        drawContext.pose().popPose()
-        //#else
-        //$$ drawContext.pose().popMatrix()
-        //#endif
+        drawContext.pose().popMatrix()
     }
 
     /**
@@ -114,35 +75,71 @@ object DrawContextUtils {
     @Suppress("DEPRECATION")
     inline fun pushPop(action: () -> Unit) {
         pushMatrix()
-        action()
-        popMatrix()
+        try {
+            action()
+        } finally {
+            popMatrix()
+        }
+    }
+
+    /**
+     * Push and pop the matrix stack, running the action in between, and returning the result of the action.
+     */
+    @Suppress("DEPRECATION")
+    inline fun <T> pushPopResult(
+        onError: (Exception) -> T = { throw it },
+        action: () -> T,
+    ): T {
+        pushMatrix()
+        return try {
+            action()
+        } catch (e: Exception) {
+            onError(e)
+        } finally {
+            popMatrix()
+        }
     }
 
     /**
      * Run operations inside a DrawContext translation
      */
-    inline fun translated(x: Number = 0, y: Number = 0, z: Number = 0, action: () -> Unit) {
+    inline fun translated(x: Number = 0, y: Number = 0, action: () -> Unit) {
         // TODO: when fully modern, use pushPop instead
-        translate(x.toFloat(), y.toFloat(), z.toFloat())
+        translate(x.toFloat(), y.toFloat())
         action()
-        translate(-x.toFloat(), -y.toFloat(), -z.toFloat())
+        translate(-x.toFloat(), -y.toFloat())
+    }
+
+    /**
+     * Performs a push-pop around the action, and runs the action inside a DrawContext translation, returning the result of the action.
+     */
+    inline fun <reified T> translatedPushPopResult(
+        x: Number = 0,
+        y: Number = 0,
+        postTranslateScale: Float? = null,
+        onError: (Exception) -> T = { throw it },
+        action: () -> T,
+    ): T = pushPopResult(onError) {
+        translate(x.toFloat(), y.toFloat())
+        postTranslateScale?.let { scale(it, it) }
+        return action()
     }
 
     /**
      * Run operations inside a DrawContext scale
      */
-    inline fun scaled(x: Number = 1, y: Number = 1, z: Number = 1, action: () -> Unit) {
+    inline fun scaled(x: Number = 1, y: Number = 1, action: () -> Unit) {
         // TODO: when fully modern, use pushPop instead
-        scale(x.toFloat(), y.toFloat(), z.toFloat())
+        scale(x.toFloat(), y.toFloat())
         action()
-        scale(1 / x.toFloat(), 1 / y.toFloat(), 1 / z.toFloat())
+        scale(1 / x.toFloat(), 1 / y.toFloat())
     }
 
     fun loadIdentity() {
-        //#if MC < 1.21.6
-        drawContext.pose().setIdentity()
-        //#else
-        //$$ drawContext.pose().identity()
-        //#endif
+        drawContext.pose().identity()
+    }
+
+    fun addGuiElement(state: GuiElementRenderState) {
+        drawContext.guiRenderState.addGuiElement(state)
     }
 }

@@ -11,23 +11,27 @@ import at.hannibal2.skyhanni.utils.InventoryDetector
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.takeIfNotEmpty
 import at.hannibal2.skyhanni.utils.compat.ColoredBlockCompat
 import at.hannibal2.skyhanni.utils.compat.ColoredBlockCompat.Companion.isStainedGlassPane
 import at.hannibal2.skyhanni.utils.compat.DyeCompat.Companion.isDye
+import at.hannibal2.skyhanni.utils.compat.InventoryCompat.isNotEmpty
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.container
+import at.hannibal2.skyhanni.utils.compat.getTooltip
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import com.google.gson.JsonObject
 import com.mojang.blaze3d.platform.NativeImage
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.client.renderer.texture.DynamicTexture
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
+import net.minecraft.world.Container
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.Slot
-import net.minecraft.world.item.ItemStack
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.BufferedReader
@@ -47,14 +51,14 @@ object BetterContainers {
 
     private val config get() = SkyHanniMod.feature.inventory.improvedSBMenus
 
-    private val x: ResourceLocation = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54")
+    private val x: Identifier = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54")
 
-    private val toggleOff = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54/toggle_off.png")
-    private val toggleOn = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54/toggle_on.png")
-    private val dynamic54Base = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54.png")
-    private val dynamic54Slot = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54_slot_ctm.png")
-    private val dynamic54Button = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54_button_ctm.png")
-    private val customDynamicChest = ResourceLocation.fromNamespaceAndPath("skyhanni", "dynamic_chest_inventory.png")
+    private val toggleOff = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54/toggle_off.png")
+    private val toggleOn = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54/toggle_on.png")
+    private val dynamic54Base = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54.png")
+    private val dynamic54Slot = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54_slot_ctm.png")
+    private val dynamic54Button = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_54/style1/dynamic_54_button_ctm.png")
+    private val customDynamicChest = Identifier.fromNamespaceAndPath("skyhanni", "dynamic_chest_inventory.png")
 
     /**
      * REGEX-TEST: navigate the maze
@@ -63,7 +67,7 @@ object BetterContainers {
         "disallowed",
         "(?i)navigate the maze.*",
     )
-    val disallowedInventory = InventoryDetector(disallowedInventoryPattern)
+    val disallowedInventory = InventoryDetector { disallowedInventoryPattern }
 
     val isRendering: Boolean get() = loaded && gpuTex != null
     val isOverriding: Boolean get() = chestOpen && isRendering && !disallowedInventory.isInside()
@@ -94,8 +98,8 @@ object BetterContainers {
     }
 
     @JvmStatic
-    fun slotCanBeHighlighted(slot: Slot): Boolean {
-        return if (!isOverriding) slot.isHighlightable
+    fun slotCanBeHighlighted(slot: Slot, original: Boolean): Boolean {
+        return if (!isOverriding) original
         else !isBlankStack(slot.item)
     }
 
@@ -137,7 +141,7 @@ object BetterContainers {
         lastInvHashcode = inventory.hashCode()
         hasItem = (0 until inventory.containerSize).any { slotIndex ->
             val stack = inventory.getItem(slotIndex)
-            stack != null
+            stack.isNotEmpty()
         }
         hasNullPane = (0 until inventory.containerSize).any { slotIndex ->
             val stack = inventory.getItem(slotIndex)
@@ -146,18 +150,17 @@ object BetterContainers {
     }
 
     // <editor-fold desc="Resource Reading">
-    private fun readImageResources(id: ResourceLocation, altId: ResourceLocation): BufferedImage? =
+    private fun readImageResources(id: Identifier, altId: Identifier): BufferedImage? =
         readImageResource(id) ?: readImageResource(altId)
 
-    private fun readImageResource(id: ResourceLocation): BufferedImage? = runCatching {
+    private fun readImageResource(id: Identifier): BufferedImage? = runCatching {
         val mcResource = Minecraft.getInstance().resourceManager.getResource(id).get()
         ImageIO.read(mcResource.open())
     }.onFailure {
         ErrorManager.logErrorWithData(it, "Could not read image resource: ${id.path}")
-        null
     }.getOrNull()
 
-    private fun readJsonResource(id: ResourceLocation): BufferedReader? = runCatching {
+    private fun readJsonResource(id: Identifier): BufferedReader? = runCatching {
         val mcResource = Minecraft.getInstance().resourceManager.getResource(id).get()
         val streamReader = InputStreamReader(mcResource.open(), StandardCharsets.UTF_8)
         BufferedReader(streamReader)
@@ -177,15 +180,20 @@ object BetterContainers {
         return out
     }
 
+    private fun getBaseTextColor(
+        backgroundStyle: LegacyBetterContainers.BackgroundStyle
+    ) = readJsonResource(backgroundStyle.configId)?.use { reader ->
+        val newJson = ConfigManager.gson.fromJson(reader, JsonObject::class.java)
+        @Suppress("AvoidBritishSpelling")
+        val textColourS = newJson.get("text-colour").asString
+        textColourS.toLong(16).toInt()
+    } ?: 4210752
+
     private fun generateBufferedImages() {
         val backgroundStyle = config.menuBackgroundStyle
         val buttonStyle = config.buttonBackgroundStyle
 
-        textColor = (readJsonResource(backgroundStyle.configId)?.use { reader ->
-            val newJson = ConfigManager.gson.fromJson(reader, JsonObject::class.java)
-            val textColourS = newJson.get("text-colour").asString
-            textColourS.toLong(16).toInt()
-        } ?: 4210752) or 0xFF000000.toInt()
+        textColor = getBaseTextColor(backgroundStyle) or 0xFF000000.toInt()
 
         bufferedImageOn = readImageResource(toggleOn)
         bufferedImageOff = readImageResource(toggleOff)
@@ -195,7 +203,7 @@ object BetterContainers {
         bufferedImageButton = readImageResources(buttonStyle.buttonId, dynamic54Button)
     }
 
-    private fun shouldRenderStack(stack: ItemStack): Boolean {
+    private fun shouldRenderStack(stack: SafeItemStack): Boolean {
         return !isBlankStack(stack) && !isToggleOff(stack) && !isToggleOn(stack)
     }
 
@@ -204,32 +212,32 @@ object BetterContainers {
         clickedSlot = slot
     }
 
-    fun getClickedSlot(): Int = if (clickedSlotAt.passedSince() <= 500.milliseconds) clickedSlot else -1
+    private fun getClickedSlot(): Int = if (clickedSlotAt.passedSince() <= 500.milliseconds) clickedSlot else -1
 
-    fun isBlankStack(
-        stack: ItemStack,
-    ): Boolean = stack.isStainedGlassPane(ColoredBlockCompat.BLACK)
+    private fun isBlankStack(stack: SafeItemStack): Boolean = stack.isStainedGlassPane(ColoredBlockCompat.BLACK) &&
+        stack.count == 1 &&
+        stack.getTooltip().isEmpty()
 
-    fun isButtonStack(
-        stack: ItemStack?,
+    private fun isButtonStack(
+        stack: SafeItemStack?,
     ): Boolean {
-        val stack = stack ?: return false
-        val isGlassPane = stack.isStainedGlassPane()
-        val isUnknownInternalName = stack.getInternalNameOrNull() == null
-        val isToggle = isToggleOn(stack) || isToggleOff(stack)
+        val realStack = stack ?: return false
+        val isGlassPane = realStack.isStainedGlassPane()
+        val isUnknownInternalName = realStack.getInternalNameOrNull() == null
+        val isToggle = isToggleOn(realStack) || isToggleOff(realStack)
         return !isGlassPane && !isUnknownInternalName && !isToggle
     }
 
-    fun isToggleOn(stack: ItemStack): Boolean = isToggleCommon(stack, "disable")
-    fun isToggleOff(stack: ItemStack): Boolean = isToggleCommon(stack, "enable")
-    fun isToggleCommon(stack: ItemStack, verb: String): Boolean {
+    private fun isToggleOn(stack: SafeItemStack): Boolean = isToggleCommon(stack, "disable")
+    private fun isToggleOff(stack: SafeItemStack): Boolean = isToggleCommon(stack, "enable")
+    private fun isToggleCommon(stack: SafeItemStack, verb: String): Boolean {
         val hasText = stack.getLore().takeIfNotEmpty()?.last()?.endsWith("Click to $verb!") ?: false
         return hasText && stack.isDye()
     }
 
-    fun getTextureIdentifier(original: ResourceLocation): ResourceLocation {
+    fun getTextureIdentifier(original: Identifier): Identifier {
         if (!chestOpen) return original
-        val inv = (Minecraft.getInstance().screen as? ContainerScreen)?.container
+        val inv = (MinecraftCompat.screen as? ContainerScreen)?.container
             ?: return original
         if (inv !is ChestMenu) return original
         val invHash = inv.hashCode()
@@ -267,6 +275,109 @@ object BetterContainers {
         backed.upload()
     }
 
+    private fun processChestIndices(
+        handlerInventory: Container,
+        horizontalTexMult: Int,
+        verticalTexMult: Int,
+        bufferedImageNew: BufferedImage
+    ) {
+        val size = handlerInventory.containerSize
+        val isSlot = Array(9) { BooleanArray(size / 9) }
+        val isButton = Array(9) { BooleanArray(size / 9) }
+
+        val unformattedLower = InventoryUtils.openInventoryName()
+        val containsStakes = unformattedLower.contains("Stakes")
+        val isUltraSequencer = unformattedLower.startsWith("Ultrasequencer") && !containsStakes
+        val isSuperpairs = unformattedLower.startsWith("Superpairs") && !containsStakes
+
+        for (index in 0..<size) {
+            // Intentionally counts empty slots as well, since we want to render them as well
+            val stack: SafeItemStack = handlerInventory.getItem(index)
+            // Column and row index
+            val cI = index % 9
+            val rI = index / 9
+
+            val ultraSequencerOverride = isUltraSequencer && stack.isDye()
+            val superpairsOverride = isSuperpairs && index > 9 && index < size - 9
+            isButton[cI][rI] = when {
+                ultraSequencerOverride || superpairsOverride -> false
+                else -> isButtonStack(stack)
+            }
+
+            // This is weird, but it was a logical flip of a no-op from NEU's code :shrug:
+            if (!isButton[cI][rI] || lastClickedSlot != index) {
+                isSlot[cI][rI] = !isBlankStack(stack) && !isButton[cI][rI]
+            }
+        }
+
+        for (index in 0..<size) {
+            // Intentionally counts empty slots as well, since we want to render them as well
+            val stack: SafeItemStack = handlerInventory.getItem(index)
+            val xi = index % 9
+            val yi = index / 9
+
+            val isThisButton = isButton[xi][yi]
+            val isThisSlot = isSlot[xi][yi]
+            if (!isThisButton && !isThisSlot) continue
+
+            val x = 7 * horizontalTexMult + xi * 18 * horizontalTexMult
+            val y = 17 * verticalTexMult + yi * 18 * verticalTexMult
+
+            val on: Boolean = isToggleOn(stack)
+            val off: Boolean = isToggleOff(stack)
+
+            if (on || off) {
+                for (x2 in 0..17) {
+                    for (y2 in 0..17) {
+                        val toggle: BufferedImage = (if (on) bufferedImageOn else bufferedImageOff) ?: continue
+                        val c = Color(toggle.getRGB(x2, y2), true)
+                        if (c.alpha < 10) continue
+                        bufferedImageNew.setRGB(x + x2, y + y2, c.rgb)
+                    }
+                }
+                continue
+            }
+
+            val targetArr = if (isThisButton) isButton else isSlot
+            val targetBuffer = (if (isThisButton) bufferedImageButton else bufferedImageSlot) ?: continue
+
+            val up = yi > 0 && targetArr[xi][yi - 1]
+            val right = xi < targetArr.size - 1 && targetArr[xi + 1][yi]
+            val down = yi < targetArr[xi].size - 1 && targetArr[xi][yi + 1]
+            val left = xi > 0 && targetArr[xi - 1][yi]
+
+            val upLeft = yi > 0 && xi > 0 && targetArr[xi - 1][yi - 1]
+            val upRight = yi > 0 && xi < targetArr.size - 1 && targetArr[xi + 1][yi - 1]
+            val downRight = xi < targetArr.size - 1 && yi < targetArr[xi + 1].size - 1 && targetArr[xi + 1][yi + 1]
+            val downLeft = xi > 0 && yi < targetArr[xi - 1].size - 1 && targetArr[xi - 1][yi + 1]
+
+            val ctmData = CTMUtils.CTMData(
+                up, right, down, left,
+                upLeft, upRight, downRight, downLeft,
+            )
+            val ctmIndex: Int = CTMUtils.getCTMIndex(ctmData)
+
+            val rgbArray = targetBuffer.getRGB(
+                (ctmIndex % 12) * 19 * horizontalTexMult,
+                (ctmIndex / 12) * 19 * verticalTexMult,
+                18 * horizontalTexMult,
+                18 * verticalTexMult,
+                null,
+                0,
+                18 * verticalTexMult,
+            )
+            bufferedImageNew.setRGB(
+                x,
+                y,
+                18 * horizontalTexMult,
+                18 * verticalTexMult,
+                rgbArray,
+                0,
+                18 * verticalTexMult,
+            )
+        }
+    }
+
     private fun generateModernTex(handler: ChestMenu) {
         if (!hasItem || !hasNullPane) {
             gpuTex = null
@@ -294,101 +405,8 @@ object BetterContainers {
         g.drawImage(bufferedImageBase, 0, 0, null)
         g.dispose()
 
-        val size = handlerInventory.containerSize
-        val isSlot = Array(9) { BooleanArray(size / 9) }
-        val isButton = Array(9) { BooleanArray(size / 9) }
-
-        val unformattedLower = InventoryUtils.openInventoryName()
-        val containsStakes = unformattedLower.contains("Stakes")
-        val isUltraSequencer = unformattedLower.startsWith("Ultrasequencer") && !containsStakes
-        val isSuperpairs = unformattedLower.startsWith("Superpairs") && !containsStakes
-
-        for (index in 0..<size) {
-            val stack: ItemStack = handlerInventory.getItem(index) ?: continue
-            // Column and row index
-            val cI = index % 9
-            val rI = index / 9
-
-            val ultraSequencerOverride = isUltraSequencer && stack.isDye()
-            val superpairsOverride = isSuperpairs && index > 9 && index < size - 9
-            isButton[cI][rI] = when {
-                ultraSequencerOverride || superpairsOverride -> false
-                else -> isButtonStack(stack)
-            }
-
-            // This is weird, but it was a logical flip of a no-op from NEU's code :shrug:
-            if (!isButton[cI][rI] || lastClickedSlot != index) {
-                isSlot[cI][rI] = !isBlankStack(stack) && !isButton[cI][rI]
-            }
-        }
-
         try {
-            for (index in 0..<size) {
-                val stack: ItemStack = handlerInventory.getItem(index) ?: continue
-                val xi = index % 9
-                val yi = index / 9
-
-                val isThisButton = isButton[xi][yi]
-                val isThisSlot = isSlot[xi][yi]
-                if (!isThisButton && !isThisSlot) continue
-
-                val x = 7 * horizontalTexMult + xi * 18 * horizontalTexMult
-                val y = 17 * verticalTexMult + yi * 18 * verticalTexMult
-
-                val on: Boolean = isToggleOn(stack)
-                val off: Boolean = isToggleOff(stack)
-
-                if (on || off) {
-                    for (x2 in 0..17) {
-                        for (y2 in 0..17) {
-                            val toggle: BufferedImage = (if (on) bufferedImageOn else bufferedImageOff) ?: continue
-                            val c = Color(toggle.getRGB(x2, y2), true)
-                            if (c.alpha < 10) continue
-                            bufferedImageNew.setRGB(x + x2, y + y2, c.rgb)
-                        }
-                    }
-                    continue
-                }
-
-                val targetArr = if (isThisButton) isButton else isSlot
-                val targetBuffer = (if (isThisButton) bufferedImageButton else bufferedImageSlot) ?: continue
-
-                val up = yi > 0 && targetArr[xi][yi - 1]
-                val right = xi < targetArr.size - 1 && targetArr[xi + 1][yi]
-                val down = yi < targetArr[xi].size - 1 && targetArr[xi][yi + 1]
-                val left = xi > 0 && targetArr[xi - 1][yi]
-
-                val upLeft = yi > 0 && xi > 0 && targetArr[xi - 1][yi - 1]
-                val upRight = yi > 0 && xi < targetArr.size - 1 && targetArr[xi + 1][yi - 1]
-                val downRight = xi < targetArr.size - 1 && yi < targetArr[xi + 1].size - 1 && targetArr[xi + 1][yi + 1]
-                val downLeft = xi > 0 && yi < targetArr[xi - 1].size - 1 && targetArr[xi - 1][yi + 1]
-
-                val ctmData = CTMUtils.CTMData(
-                    up, right, down, left,
-                    upLeft, upRight, downRight, downLeft,
-                )
-                val ctmIndex: Int = CTMUtils.getCTMIndex(ctmData)
-
-                val rgbArray = targetBuffer.getRGB(
-                    (ctmIndex % 12) * 19 * horizontalTexMult,
-                    (ctmIndex / 12) * 19 * verticalTexMult,
-                    18 * horizontalTexMult,
-                    18 * verticalTexMult,
-                    null,
-                    0,
-                    18 * verticalTexMult,
-                )
-                bufferedImageNew.setRGB(
-                    x,
-                    y,
-                    18 * horizontalTexMult,
-                    18 * verticalTexMult,
-                    rgbArray,
-                    0,
-                    18 * verticalTexMult,
-                )
-            }
-
+            processChestIndices(handlerInventory, horizontalTexMult, verticalTexMult, bufferedImageNew)
             when (gpuTex) {
                 null -> uploadDynamicTexture(bufferedImageNew)
                 else -> updateDynamicTexture(bufferedImageNew)

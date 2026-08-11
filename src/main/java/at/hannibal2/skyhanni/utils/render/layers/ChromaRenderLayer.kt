@@ -1,111 +1,87 @@
 package at.hannibal2.skyhanni.utils.render.layers
 
-import at.hannibal2.skyhanni.api.minecraftevents.ClientEvents
-import at.hannibal2.skyhanni.config.features.chroma.ChromaConfig.Direction
-import at.hannibal2.skyhanni.features.chroma.ChromaManager
-import at.hannibal2.skyhanni.mixins.transformers.AccessorMinecraft
-import at.hannibal2.skyhanni.utils.compat.GuiScreenUtils
+import at.hannibal2.skyhanni.mixins.hooks.GuiRendererHook
 import at.hannibal2.skyhanni.utils.compat.RenderCompat.createRenderPass
 import at.hannibal2.skyhanni.utils.compat.RenderCompat.drawIndexed
 import at.hannibal2.skyhanni.utils.compat.RenderCompat.enableRenderPassScissorStateIfAble
+import at.hannibal2.skyhanni.utils.render.SkyHanniRenderPipeline
 import com.mojang.blaze3d.buffers.GpuBuffer
-import com.mojang.blaze3d.pipeline.RenderPipeline
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.MeshData
 import com.mojang.blaze3d.vertex.VertexFormat
-import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.RenderType.CompositeRenderType
-
-//#if MC > 1.21.6
-//$$ import at.hannibal2.skyhanni.mixins.hooks.GuiRendererHook
-//$$ import org.joml.Vector4f
-//#endif
-//#if MC > 1.21.8
-//$$ import org.joml.Vector3f
-//#endif
+import net.minecraft.client.renderer.rendertype.RenderSetup
+import net.minecraft.client.renderer.rendertype.RenderType
+import net.minecraft.resources.Identifier
+import org.joml.Matrix4f
+import org.joml.Vector3f
+import org.joml.Vector4f
 
 class ChromaRenderLayer(
-    name: String, size: Int, hasCrumbling: Boolean, translucent: Boolean, pipeline: RenderPipeline, phases: CompositeState,
-) : CompositeRenderType(name, size, hasCrumbling, translucent, pipeline, phases) {
+    name: String,
+    texture: Identifier? = null,
+) : RenderType(
+    name,
+    if (texture == null) {
+        RenderSetup.builder(SkyHanniRenderPipeline.CHROMA_STANDARD())
+    } else {
+        RenderSetup.builder(SkyHanniRenderPipeline.CHROMA_TEXT()).withTexture("Sampler0", texture)
+    }.createRenderSetup(),
+) {
 
     override fun draw(buffer: MeshData) {
-        val renderPipeline = this.renderPipeline
-        this.setupRenderState()
-
-        // Custom chroma uniforms
-        val chromaSize: Float = ChromaManager.config.chromaSize * (GuiScreenUtils.displayWidth / 100f)
-        var ticks = (ClientEvents.totalTicks) + (Minecraft.getInstance() as AccessorMinecraft).timer.getGameTimeDeltaPartialTick(true)
-        ticks = when (ChromaManager.config.chromaDirection) {
-            Direction.FORWARD_RIGHT, Direction.BACKWARD_RIGHT -> ticks
-            Direction.FORWARD_LEFT, Direction.BACKWARD_LEFT -> -ticks
-        }
-        val timeOffset: Float = ticks * (ChromaManager.config.chromaSpeed / 360f)
-        val saturation: Float = ChromaManager.config.chromaSaturation
-        val forwardDirection: Int = when (ChromaManager.config.chromaDirection) {
-            Direction.FORWARD_RIGHT, Direction.FORWARD_LEFT -> 1
-            Direction.BACKWARD_RIGHT, Direction.BACKWARD_LEFT -> 0
+        val renderPipeline = this.state.pipeline
+        val matrix4fStack = RenderSystem.getModelViewStack()
+        val consumer = this.state.layeringTransform.modifier
+        if (consumer != null) {
+            matrix4fStack.pushMatrix()
+            consumer.accept(matrix4fStack)
         }
 
-        //#if MC > 1.21.6
-        //$$ var dynamicTransforms = RenderSystem.getDynamicUniforms()
-        //$$     .writeTransform(
-        //$$         RenderSystem.getModelViewMatrix(),
-        //$$ 		 Vector4f(1.0F, 1.0F, 1.0F, 1.0F),
-        //#if MC < 1.21.9
-        //$$ 		 RenderSystem.getModelOffset(),
-        //#else
-        //$$         Vector3f(),
-        //#endif
-        //$$ 		 RenderSystem.getTextureMatrix(),
-        //$$ 		 RenderSystem.getShaderLineWidth()
-        //$$     )
-        //$$ if (GuiRendererHook.chromaBufferSlice == null) {
-        //$$     GuiRendererHook.computeChromaBufferSlice()
-        //$$ }
-        //#endif
+        val dynamicTransforms = RenderSystem.getDynamicUniforms().writeTransform(
+            RenderSystem.getModelViewMatrix(), Vector4f(1.0F, 1.0F, 1.0F, 1.0F),
+            Vector3f(),
+            Matrix4f(),
+        )
+        if (GuiRendererHook.chromaBufferSlice == null) {
+            GuiRendererHook.computeChromaBufferSlice()
+        }
 
         try {
             val gpuBuffer = renderPipeline.vertexFormat.uploadImmediateVertexBuffer(buffer.vertexBuffer())
             val gpuBuffer2: GpuBuffer
             val indexType: VertexFormat.IndexType
-            if (buffer.indexBuffer() == null) {
+            val indexBuffer = buffer.indexBuffer()
+            if (indexBuffer == null) {
                 val shapeIndexBuffer = RenderSystem.getSequentialBuffer(buffer.drawState().mode())
                 gpuBuffer2 = shapeIndexBuffer.getBuffer(buffer.drawState().indexCount())
                 indexType = shapeIndexBuffer.type()
             } else {
-                gpuBuffer2 = renderPipeline.vertexFormat.uploadImmediateIndexBuffer(buffer.indexBuffer())
+                gpuBuffer2 = renderPipeline.vertexFormat.uploadImmediateIndexBuffer(indexBuffer)
                 indexType = buffer.drawState().indexType()
             }
 
-            val framebuffer = state.outputState.renderTarget
+            val framebuffer = state.outputTarget.renderTarget
 
-            RenderSystem.getDevice().createRenderPass("SkyHanni Immediate Chroma Pipeline Draw", framebuffer).use { renderPass ->
-                //#if MC > 1.21.6
-                //$$ RenderSystem.bindDefaultUniforms(renderPass)
-                //$$ renderPass.setUniform("DynamicTransforms", dynamicTransforms)
-                //$$ renderPass.setUniform("SkyHanniChromaUniforms", GuiRendererHook.chromaBufferSlice)
-                //#else
-                renderPass.setUniform("chromaSize", chromaSize)
-                renderPass.setUniform("timeOffset", timeOffset)
-                renderPass.setUniform("saturation", saturation)
-                renderPass.setUniform("forwardDirection", forwardDirection)
-                //#endif
-
-                renderPass.setPipeline(renderPipeline)
-                renderPass.setVertexBuffer(0, gpuBuffer)
-
-                renderPass.enableRenderPassScissorStateIfAble()
-
-                for (i in 0..11) {
-                    val gpuTexture = RenderSystem.getShaderTexture(i)
-                    if (gpuTexture != null) {
-                        renderPass.bindSampler("Sampler$i", gpuTexture)
+            RenderSystem.getDevice().createRenderPass("SkyHanni Immediate Chroma Pipeline Draw", framebuffer)
+                .use { renderPass ->
+                    RenderSystem.bindDefaultUniforms(renderPass)
+                    renderPass.setUniform("DynamicTransforms", dynamicTransforms)
+                    GuiRendererHook.chromaBufferSlice?.let {
+                        renderPass.setUniform("SkyHanniChromaUniforms", it)
                     }
-                }
 
-                renderPass.setIndexBuffer(gpuBuffer2, indexType)
-                renderPass.drawIndexed(buffer.drawState().indexCount())
-            }
+                    renderPass.setPipeline(renderPipeline)
+                    renderPass.setVertexBuffer(0, gpuBuffer)
+
+                    renderPass.enableRenderPassScissorStateIfAble()
+
+                    for (entry in this.state.getTextures()) {
+                        renderPass.bindTexture(entry.key, entry.value.textureView, entry.value.sampler)
+                    }
+
+                    renderPass.setIndexBuffer(gpuBuffer2, indexType)
+                    renderPass.drawIndexed(buffer.drawState().indexCount())
+                }
         } catch (exception: Throwable) {
             try {
                 buffer.close()
@@ -117,7 +93,9 @@ class ChromaRenderLayer(
         }
 
         buffer.close()
-        this.clearRenderState()
+        if (consumer != null) {
+            matrix4fStack.popMatrix()
+        }
     }
 
 }

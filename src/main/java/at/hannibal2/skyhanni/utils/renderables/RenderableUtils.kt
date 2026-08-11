@@ -9,6 +9,7 @@ import at.hannibal2.skyhanni.utils.NeuItems
 import at.hannibal2.skyhanni.utils.NeuItems.getItemStackOrNull
 import at.hannibal2.skyhanni.utils.RenderUtils.HorizontalAlignment
 import at.hannibal2.skyhanni.utils.RenderUtils.VerticalAlignment
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SoundUtils
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.putAt
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
@@ -30,12 +31,15 @@ import kotlin.reflect.KMutableProperty0
 @Suppress("TooManyFunctions", "unused", "MemberVisibilityCanBePrivate")
 internal object RenderableUtils {
 
+    fun deferredItemRenderable(stackFactory: () -> SafeItemStack): Renderable =
+        Renderable.item(stackFactory) { xSpacing = 0 }
+
     /** Calculates the relative x position of the columns in a table*/
     fun calculateTableX(content: Collection<List<Renderable?>>, xPadding: Int): List<Int> {
         var index = 0
         return buildList {
             while (true) {
-                val x = content.map { it.getOrNull(index) }.takeIf { it.any { it != null } }?.maxOfOrNull {
+                val x = content.map { it.getOrNull(index) }.takeIf { list -> list.any { it != null } }?.maxOfOrNull {
                     it?.width ?: 0
                 }?.let { it + xPadding } ?: break
                 add(x)
@@ -59,7 +63,7 @@ internal object RenderableUtils {
         buildList {
             add(0)
             while (true) {
-                buffer += rows.map { it.getOrNull(index) }.takeIf { it.any { it != null } }?.maxOfOrNull {
+                buffer += rows.map { it.getOrNull(index) }.takeIf { list -> list.any { it != null } }?.maxOfOrNull {
                     it?.width ?: 0
                 }?.let { it + xPadding } ?: break
                 add(buffer)
@@ -94,14 +98,14 @@ internal object RenderableUtils {
         else -> 0
     }
 
-    private fun calculateAlignmentXOffset(renderable: Renderable, xSpace: Int) = when (renderable.horizontalAlign) {
+    fun calculateAlignmentXOffset(renderable: Renderable, xSpace: Int) = when (renderable.horizontalAlign) {
         HorizontalAlignment.LEFT -> 0
         HorizontalAlignment.CENTER -> (xSpace - renderable.width) / 2
         HorizontalAlignment.RIGHT -> xSpace - renderable.width
         else -> 0
     }
 
-    private fun calculateAlignmentYOffset(renderable: Renderable, ySpace: Int) = when (renderable.verticalAlign) {
+    fun calculateAlignmentYOffset(renderable: Renderable, ySpace: Int) = when (renderable.verticalAlign) {
         VerticalAlignment.TOP -> 0
         VerticalAlignment.CENTER -> (ySpace - renderable.height) / 2
         VerticalAlignment.BOTTOM -> ySpace - renderable.height
@@ -131,14 +135,14 @@ internal object RenderableUtils {
             Renderable.currentRenderPassMousePosition =
                 ((preScaleMouse.first - padding) * inverseScale).toInt() to ((preScaleMouse.second - padding) * inverseScale).toInt()
 
-            DrawContextUtils.translate(xOffsetRender, yOffsetRender, 0f)
-            DrawContextUtils.scale(scale, scale, 1f)
+            DrawContextUtils.translate(xOffsetRender, yOffsetRender)
+            DrawContextUtils.scale(scale, scale)
             render(
                 mouseOffsetX + (xOffset * inverseScale).toInt(),
                 mouseOffsetY + (yOffset * inverseScale).toInt(),
             )
-            DrawContextUtils.scale(inverseScale, inverseScale, 1f)
-            DrawContextUtils.translate(-xOffsetRender, -yOffsetRender, 0f)
+            DrawContextUtils.scale(inverseScale, inverseScale)
+            DrawContextUtils.translate(-xOffsetRender, -yOffsetRender)
         } finally {
             Renderable.currentRenderPassMousePosition = preScaleMouse
         }
@@ -147,52 +151,52 @@ internal object RenderableUtils {
     fun Renderable.renderXYAligned(mouseOffsetX: Int, mouseOffsetY: Int, xSpace: Int, ySpace: Int): Pair<Int, Int> {
         val xOffset = calculateAlignmentXOffset(this, xSpace)
         val yOffset = calculateAlignmentYOffset(this, ySpace)
-        DrawContextUtils.translate(xOffset.toFloat(), yOffset.toFloat(), 0f)
+        DrawContextUtils.translate(xOffset.toFloat(), yOffset.toFloat())
         this.render(mouseOffsetX + xOffset, mouseOffsetY + yOffset)
-        DrawContextUtils.translate(-xOffset.toFloat(), -yOffset.toFloat(), 0f)
+        DrawContextUtils.translate(-xOffset.toFloat(), -yOffset.toFloat())
         return xOffset to yOffset
     }
 
     fun Renderable.renderXAligned(mouseOffsetX: Int, mouseOffsetY: Int, xSpace: Int): Int {
         val xOffset = calculateAlignmentXOffset(this, xSpace)
-        DrawContextUtils.translate(xOffset.toFloat(), 0f, 0f)
+        DrawContextUtils.translate(xOffset.toFloat(), 0f)
         this.render(mouseOffsetX + xOffset, mouseOffsetY)
-        DrawContextUtils.translate(-xOffset.toFloat(), 0f, 0f)
+        DrawContextUtils.translate(-xOffset.toFloat(), 0f)
         return xOffset
     }
 
     fun Renderable.renderYAligned(mouseOffsetX: Int, mouseOffsetY: Int, ySpace: Int): Int {
         val yOffset = calculateAlignmentYOffset(this, ySpace)
-        DrawContextUtils.translate(0f, yOffset.toFloat(), 0f)
+        DrawContextUtils.translate(0f, yOffset.toFloat())
         this.render(mouseOffsetX, mouseOffsetY + yOffset)
-        DrawContextUtils.translate(0f, -yOffset.toFloat(), 0f)
+        DrawContextUtils.translate(0f, -yOffset.toFloat())
         return yOffset
     }
 
-    fun renderString(
+    internal fun renderString(
         text: String,
         scale: Double = 1.0,
         color: Color = Color.WHITE,
         inverseScale: Double = 1 / scale,
     ) {
-        DrawContextUtils.translate(1.0, 1.0, 0.0)
-        DrawContextUtils.scale(scale.toFloat(), scale.toFloat(), 1f)
+        DrawContextUtils.translate(1.0, 1.0)
+        DrawContextUtils.scale(scale.toFloat(), scale.toFloat())
         GuiRenderUtils.drawString(text, 0f, 0f, color.rgb)
-        DrawContextUtils.scale(inverseScale.toFloat(), inverseScale.toFloat(), 1f)
-        DrawContextUtils.translate(-1.0, -1.0, 0.0)
+        DrawContextUtils.scale(inverseScale.toFloat(), inverseScale.toFloat())
+        DrawContextUtils.translate(-1.0, -1.0)
     }
 
-    fun renderString(
+    internal fun renderString(
         text: Component,
         scale: Double = 1.0,
         color: Color = Color.WHITE,
         inverseScale: Double = 1 / scale,
     ) {
-        DrawContextUtils.translate(1.0, 1.0, 0.0)
-        DrawContextUtils.scale(scale.toFloat(), scale.toFloat(), 1f)
+        DrawContextUtils.translate(1.0, 1.0)
+        DrawContextUtils.scale(scale.toFloat(), scale.toFloat())
         GuiRenderUtils.drawString(text, 0f, 0f, color.rgb)
-        DrawContextUtils.scale(inverseScale.toFloat(), inverseScale.toFloat(), 1f)
-        DrawContextUtils.translate(-1.0, -1.0, 0.0)
+        DrawContextUtils.scale(inverseScale.toFloat(), inverseScale.toFloat())
+        DrawContextUtils.translate(-1.0, -1.0)
     }
 
     inline fun <T> MutableList<Searchable>.addNullableButton(
@@ -317,12 +321,28 @@ internal object RenderableUtils {
     inline fun <reified T : Enum<T>> MutableList<Renderable>.addRenderableNullableButton(
         label: String,
         current: T?,
-        crossinline getName: (T?) -> String = { it?.toString().orEmpty() },
         crossinline onChange: (T?) -> Unit,
         universe: List<T?> = enumValues<T>().toList(),
+        nullLabel: String? = null,
         enableUniverseScroll: Boolean = true,
     ) {
-        add(createButtonNew(label, current, getName, onChange, universe, enableUniverseScroll).renderable)
+        val map = universe.associateWithTo(LinkedHashMap()) { it.toString() }
+        if (nullLabel != null) map.putAt(0, null, nullLabel)
+
+        val currentName = map[current] ?: error("unknown entry $current in map")
+        add(
+            createButtonNew(
+                label = label,
+                current = currentName,
+                getName = { it ?: nullLabel.orEmpty() },
+                onChange = { newString ->
+                    val newKey = map.entries.first { it.value == newString }.key
+                    onChange(newKey)
+                },
+                universe = map.values.toList(),
+                enableUniverseScroll = enableUniverseScroll,
+            ).toRenderable(),
+        )
     }
 
     fun <T> List<T?>.circle(current: T?): T? {
@@ -425,7 +445,7 @@ internal object RenderableUtils {
         val outerList = mutableListOf<List<Renderable>>()
         for (entry in sorted) {
             val item = entry.item.getItemStackOrNull()?.let {
-                Renderable.item(it, scale = itemScale)
+                Renderable.item(it) { scale = itemScale }
             } ?: continue
             val left = hoverTips(
                 entry.left,
@@ -446,3 +466,9 @@ fun MutableList<Renderable>.addLine(builderAction: MutableList<Renderable>.() ->
 fun MutableList<Renderable>.addLine(tips: List<String>, builderAction: MutableList<Renderable>.() -> Unit) {
     add(hoverTips(Renderable.horizontal(buildList { builderAction() }, 0), tips = tips))
 }
+
+@JvmName("stringListToRenderables")
+fun List<String>.toRenderables(): List<Renderable> = map { Renderable.text(it) }
+
+@JvmName("componentListToRenderables")
+fun List<Component>.toRenderables(): List<Renderable> = map { Renderable.text(it) }

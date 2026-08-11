@@ -3,14 +3,18 @@ package at.hannibal2.skyhanni.data
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.events.GuiContainerEvent
 import at.hannibal2.skyhanni.events.InventoryCloseEvent
+import at.hannibal2.skyhanni.events.OwnInventoryArmorUpdateEvent
 import at.hannibal2.skyhanni.events.OwnInventoryItemUpdateEvent
+import at.hannibal2.skyhanni.events.OwnInventoryMenuUpdateEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.entity.ItemAddInInventoryEvent
 import at.hannibal2.skyhanni.events.minecraft.packet.PacketReceivedEvent
 import at.hannibal2.skyhanni.events.minecraft.packet.PacketSentEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.getInternalName
 import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.ItemUtils.repoItemName
@@ -33,7 +37,7 @@ import kotlin.time.Duration.Companion.seconds
 @SkyHanniModule
 object OwnInventoryData {
 
-    private var itemAmounts = mapOf<NeuInternalName, Int>()
+    private var inventorySnapshot = InventorySnapshot()
     private var dirty = false
 
     /**
@@ -47,17 +51,38 @@ object OwnInventoryData {
     @HandleEvent(priority = HandleEvent.LOW, receiveCancelled = true, onlyOnSkyblock = true)
     fun onItemPickupReceivePacket(event: PacketReceivedEvent) {
         val packet = event.packet
-        if (packet is ClientboundContainerSetSlotPacket || packet is ClientboundTakeItemEntityPacket) {
-            dirty = true
-        }
-        if (packet is ClientboundContainerSetSlotPacket) {
-            val windowId = packet.containerId
-            if (windowId == 0) {
+        when (packet) {
+            is ClientboundTakeItemEntityPacket -> {
+                dirty = true
+            }
+            is ClientboundContainerSetSlotPacket -> {
+                dirty = true
+
+                if (packet.containerId != 0) return
+
                 val slot = packet.slot
-                val item = packet.item ?: return
+                val item = packet.item
+
                 DelayedRun.runNextTick {
-                    OwnInventoryItemUpdateEvent(item, slot).post()
+                    val internalName = item.getInternalName()
+                    when (slot) {
+                        in 0..4 -> {} // crafting output+grid
+                        in 5..8 -> { // armor
+                            ChatUtils.debug("OwnInventoryArmorUpdateEvent: $slot - $item - $internalName")
+                            OwnInventoryArmorUpdateEvent(item, slot).post()
+                        }
+                        in 9..43 -> { // normal items
+                            ChatUtils.debug("OwnInventoryItemUpdateEvent: $slot - $item - $internalName")
+                            OwnInventoryItemUpdateEvent(item, slot).post()
+                        }
+                        44 -> { // skyblock menu
+                            ChatUtils.debug("OwnInventoryMenuUpdateEvent: $slot - $item - $internalName")
+                            OwnInventoryMenuUpdateEvent(item).post()
+                        }
+                        45 -> {} // offhand
+                    }
                 }
+
             }
         }
     }
@@ -73,46 +98,69 @@ object OwnInventoryData {
 
     @HandleEvent(onlyOnSkyblock = true)
     fun onTick() {
-        if (itemAmounts.isEmpty()) {
-            itemAmounts = getCurrentItems()
+        if (inventorySnapshot.isEmpty()) {
+            inventorySnapshot = getCurrentItems()
         }
 
         if (!dirty) return
         dirty = false
 
-        val map = getCurrentItems()
-        for ((internalName, amount) in map) {
-            calculateDifference(internalName, amount)
+        val newSnapshot = getCurrentItems()
+        for ((internalName, amount) in calculateAddedItems(inventorySnapshot, newSnapshot)) {
+            addItem(internalName, amount)
         }
-        itemAmounts = map
+        inventorySnapshot = newSnapshot
     }
 
-    private fun getCurrentItems(): MutableMap<NeuInternalName, Int> {
-        val map = mutableMapOf<NeuInternalName, Int>()
+    private fun getCurrentItems(): InventorySnapshot {
+        val inventoryItems = mutableMapOf<NeuInternalName, Int>()
         for (itemStack in InventoryUtils.getItemsInOwnInventory()) {
             val internalName = itemStack.getInternalNameOrNull() ?: continue
-            map.addOrPut(internalName, itemStack.count)
+            inventoryItems.addOrPut(internalName, itemStack.count)
         }
-        return map
+
+        val armorItems = mutableMapOf<NeuInternalName, Int>()
+        for (itemStack in InventoryUtils.getArmor()) {
+            val internalName = itemStack?.getInternalNameOrNull() ?: continue
+            armorItems.addOrPut(internalName, itemStack.count)
+        }
+        return InventorySnapshot(inventoryItems, armorItems)
     }
 
     @HandleEvent
     fun onWorldChange() {
-        itemAmounts = emptyMap()
+        inventorySnapshot = InventorySnapshot()
     }
 
-    private fun calculateDifference(internalName: NeuInternalName, newAmount: Int) {
-        val oldAmount = itemAmounts[internalName] ?: 0
+    internal data class InventorySnapshot(
+        val inventoryItems: Map<NeuInternalName, Int> = emptyMap(),
+        val armorItems: Map<NeuInternalName, Int> = emptyMap(),
+    ) {
+        fun isEmpty(): Boolean = inventoryItems.isEmpty() && armorItems.isEmpty()
+    }
 
-        val diff = newAmount - oldAmount
-        if (diff > 0) {
-            addItem(internalName, diff)
+    internal fun calculateAddedItems(
+        oldSnapshot: InventorySnapshot,
+        newSnapshot: InventorySnapshot,
+    ): Map<NeuInternalName, Int> = buildMap {
+        for ((internalName, newInventoryAmount) in newSnapshot.inventoryItems) {
+            val oldInventoryAmount = oldSnapshot.inventoryItems[internalName] ?: 0
+            val inventoryDiff = newInventoryAmount - oldInventoryAmount
+            if (inventoryDiff <= 0) continue
+
+            val oldArmorAmount = oldSnapshot.armorItems[internalName] ?: 0
+            val newArmorAmount = newSnapshot.armorItems[internalName] ?: 0
+            val armorRemoved = (oldArmorAmount - newArmorAmount).coerceAtLeast(0)
+            val addedAmount = inventoryDiff - armorRemoved
+            if (addedAmount > 0) {
+                this[internalName] = addedAmount
+            }
         }
     }
 
-    @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
-        val item = MinecraftCompat.localPlayer.getItemOnCursor() ?: return
+    @HandleEvent(InventoryCloseEvent::class)
+    fun onInventoryClose() {
+        val item = MinecraftCompat.localPlayerOrNull?.getItemOnCursor() ?: return
         val internalNameOrNull = item.getInternalNameOrNull() ?: return
         ignoreItem(500.milliseconds, internalNameOrNull)
     }
@@ -171,7 +219,7 @@ object OwnInventoryData {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         sackToInventoryChatPattern.matchMatcher(event.message) {
             val name = group("name")
             ignoreItem(500.milliseconds) { it.repoItemName.contains(name) }

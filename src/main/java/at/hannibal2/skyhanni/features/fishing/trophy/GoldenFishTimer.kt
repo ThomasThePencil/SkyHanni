@@ -7,8 +7,6 @@ import at.hannibal2.skyhanni.config.features.fishing.trophyfishing.GoldenFishTim
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
-import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.entity.EntityMaxHealthUpdateEvent
 import at.hannibal2.skyhanni.events.fishing.FishingBobberCastEvent
@@ -25,7 +23,6 @@ import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.EntityUtils.wearingSkullTexture
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.ItemUtils
-import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzColor
 import at.hannibal2.skyhanni.utils.NumberUtil.formatPercentage
@@ -42,7 +39,6 @@ import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.SoundUtils
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addHorizontalSpacer
-import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addItemStack
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawString
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.exactLocation
@@ -103,12 +99,9 @@ object GoldenFishTimer {
     private val DESPAWN_TIME = 1.minutes
     private val MAX_ROD_TIME = 3.minutes
 
-    private val goldBaitLevel get() =
-        AttributeShardsData.getActiveLevel(GOLDFIN_SHARD_ID)
-    private val minimumSpawnTime get() =
-        8.minutes - (30.seconds * goldBaitLevel)
-    private val maximumSpawnTime get() =
-        12.minutes - (30.seconds * goldBaitLevel)
+    private val goldBaitLevel get() = AttributeShardsData.getActiveLevel(GOLDFIN_SHARD_ID)
+    private val minimumSpawnTime get() = 8.minutes - (30.seconds * goldBaitLevel)
+    private val maximumSpawnTime get() = 12.minutes - (30.seconds * goldBaitLevel)
 
     private var lastFishEntity = SimpleTimeMark.farPast()
     private var lastChatMessage = SimpleTimeMark.farPast()
@@ -132,14 +125,12 @@ object GoldenFishTimer {
         handle()
     }
 
-    private val GOLDEN_FISH_SKULL_TEXTURE by lazy { SkullTextureHolder.getTexture("GOLDEN_FISH") }
-    private val goldenFishSkullItem by lazy {
-        ItemUtils.createSkull(
-            displayName = "§6Golden Fish",
-            uuid = "b7fdbe67-cd00-4683-b9fa-9e3e17738254",
-            value = GOLDEN_FISH_SKULL_TEXTURE,
-        )
-    }
+    private val GOLDEN_FISH_SKULL_TEXTURE by SkullTextureHolder.texture("GOLDEN_FISH")
+    private val goldenFishSkullItem = ItemUtils.repoSkullProvider(
+        displayName = "§6Golden Fish",
+        uuid = "b7fdbe67-cd00-4683-b9fa-9e3e17738254",
+        repoSkullId = "GOLDEN_FISH",
+    )
     private var interactions = 0
     private var goingDownInit = true
     private var goingDownPost = false
@@ -151,7 +142,7 @@ object GoldenFishTimer {
     private var display: Renderable? = null
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isActive()) return
         if (spawnPattern.matches(event.message)) {
             lastChatMessage = SimpleTimeMark.now()
@@ -166,7 +157,7 @@ object GoldenFishTimer {
         if (weakPattern.matches(event.message)) {
             goldenFishDespawnTimer = DESPAWN_TIME.fromServerNow()
             val entity = confirmedGoldenFishEntity ?: return
-            if (config.highlight) RenderLivingEntityHelper.setEntityColorWithNoHurtTime(
+            if (config.highlight) RenderLivingEntityHelper.setEntityColor(
                 entity,
                 LorenzColor.GREEN.toColor().addAlpha(100),
             ) { true }
@@ -200,9 +191,11 @@ object GoldenFishTimer {
     }
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay() {
         if (!isActive()) return
-        config.position.renderRenderable(display, posLabel = "Golden Fish Timer")
+        display?.let {
+            config.position.renderRenderable(it, posLabel = "Golden Fish Timer")
+        }
     }
 
     private fun updateDisplay() {
@@ -216,7 +209,7 @@ object GoldenFishTimer {
 
     private fun buildCompactDisplay(): Renderable {
         return Renderable.horizontal {
-            addItemStack(goldenFishSkullItem)
+            add(Renderable.item(goldenFishSkullItem))
             addHorizontalSpacer()
             addString(
                 if (isGoldenFishActive()) {
@@ -232,13 +225,11 @@ object GoldenFishTimer {
 
     private fun buildDisplay(icon: Boolean): Renderable = Renderable.horizontal {
         if (icon) {
-            // TODO use MutableList<Renderable>.addItemStack once it allows for align
             add(
-                Renderable.item(
-                    goldenFishSkullItem,
-                    2.5,
-                    verticalAlign = RenderUtils.VerticalAlignment.CENTER,
-                ),
+                Renderable.item(goldenFishSkullItem) {
+                    scale = 2.5
+                    verticalAlign = RenderUtils.VerticalAlignment.CENTER
+                },
             )
         }
         val text = buildList {
@@ -297,9 +288,9 @@ object GoldenFishTimer {
     }
 
     @HandleEvent
-    fun onSecondPassed(event: SecondPassedEvent) {
+    fun onSecondPassed() {
         if (!isEnabled()) return
-        hasLavaRodInInventory = InventoryUtils.containsInLowerInventory { it.getInternalNameOrNull()?.isLavaRod() == true }
+        hasLavaRodInInventory = InventoryUtils.containsInLowerInventoryInternalName { it.isLavaRod() }
 
         if (!isActive()) return
 
@@ -337,8 +328,8 @@ object GoldenFishTimer {
         }
     }
 
-    @HandleEvent
-    fun onBobberThrow(event: FishingBobberCastEvent) {
+    @HandleEvent(FishingBobberCastEvent::class)
+    fun onBobberThrow() {
         if (!isActive()) return
         goingDownInit = true
         goingDownPost = false
@@ -380,7 +371,7 @@ object GoldenFishTimer {
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Golden Fish Timer")
         if (!isEnabled()) {
             event.addIrrelevant("Not Enabled")
@@ -430,7 +421,7 @@ object GoldenFishTimer {
 
     private fun isGoldenFishActive() = confirmedGoldenFishEntity != null
 
-    private fun isEnabled() = config.enabled && (IslandType.CRIMSON_ISLE.isCurrent() || SkyBlockUtils.isStrandedProfile)
+    private fun isEnabled() = config.enabled && (IslandType.CRIMSON_ISLE.isInIsland() || SkyBlockUtils.isStrandedProfile)
     private fun isActive() = isEnabled() && isFishing && hasLavaRodInInventory
 
 }

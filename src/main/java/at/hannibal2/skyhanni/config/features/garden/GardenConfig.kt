@@ -6,19 +6,25 @@ import at.hannibal2.skyhanni.config.core.config.Position
 import at.hannibal2.skyhanni.config.features.garden.composter.ComposterConfig
 import at.hannibal2.skyhanni.config.features.garden.contest.JacobContestConfig
 import at.hannibal2.skyhanni.config.features.garden.cropmilestones.CropMilestonesConfig
+import at.hannibal2.skyhanni.config.features.garden.greenhouse.GreenhouseConfig
 import at.hannibal2.skyhanni.config.features.garden.laneswitch.FarmingLaneConfig
+import at.hannibal2.skyhanni.config.features.garden.leaderboards.EliteFarmersLeaderboardsConfig
 import at.hannibal2.skyhanni.config.features.garden.optimalAngles.OptimalAnglesConfig
 import at.hannibal2.skyhanni.config.features.garden.optimalspeed.OptimalSpeedConfig
 import at.hannibal2.skyhanni.config.features.garden.pests.PestsConfig
 import at.hannibal2.skyhanni.config.features.garden.visitor.VisitorConfig
+import at.hannibal2.skyhanni.features.garden.farming.NoBreak.NoBreakItem
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.Category
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorKeybind
 import io.github.notenoughupdates.moulconfig.annotations.ConfigLink
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 import io.github.notenoughupdates.moulconfig.annotations.SearchTag
+import org.lwjgl.glfw.GLFW
 
 class GardenConfig {
     @Expose
@@ -29,6 +35,10 @@ class GardenConfig {
     @Expose
     @Category(name = "Visitor", desc = "Visitor Settings")
     val visitors: VisitorConfig = VisitorConfig()
+
+    @Expose
+    @Category(name = "Elite Leaderboards", desc = "")
+    val eliteFarmersLeaderboards: EliteFarmersLeaderboardsConfig = EliteFarmersLeaderboardsConfig()
 
     @Expose
     @ConfigOption(name = "Numbers", desc = "")
@@ -44,6 +54,14 @@ class GardenConfig {
     @ConfigOption(name = "Custom Keybinds", desc = "")
     @Accordion
     val keyBind: KeyBindConfig = KeyBindConfig()
+
+    @Expose
+    @ConfigOption(
+        name = "Prevent Breaking Crops",
+        desc = "Stops you from breaking crops while holding certain items.",
+    )
+    @ConfigEditorDraggableList
+    val noBreakItems: MutableList<NoBreakItem> = NoBreakItem.entries.toMutableList()
 
     @Expose
     @Category(name = "Optimal Speed", desc = "Optimal Speed Settings")
@@ -64,11 +82,6 @@ class GardenConfig {
     val gardenLevels: GardenLevelConfig = GardenLevelConfig()
 
     @Expose
-    @ConfigOption(name = "Farming Weight", desc = "")
-    @Accordion
-    val eliteFarmingWeights: EliteFarmingWeightConfig = EliteFarmingWeightConfig()
-
-    @Expose
     @ConfigOption(name = "Money per Hour", desc = "")
     @Accordion
     val moneyPerHours: MoneyPerHourConfig = MoneyPerHourConfig()
@@ -79,9 +92,14 @@ class GardenConfig {
     val jacobContest: JacobContestConfig = JacobContestConfig()
 
     @Expose
-    @ConfigOption(name = "Armor Drop Tracker", desc = "")
+    @ConfigOption(name = "Rare Crop Tracker", desc = "")
     @Accordion
-    val armorDropTracker: ArmorDropTrackerConfig = ArmorDropTrackerConfig()
+    val rareCropTracker: RareCropTrackerConfig = RareCropTrackerConfig()
+
+    @Expose
+    @ConfigOption(name = "Crop Break Tracker", desc = "")
+    @Accordion
+    val gardenBpsTracker: GardenBpsTrackerConfig = GardenBpsTrackerConfig()
 
     @Expose
     @ConfigOption(name = "Anita Shop", desc = "")
@@ -95,6 +113,10 @@ class GardenConfig {
     @Expose
     @Category(name = "Pests", desc = "Pests Settings")
     val pests: PestsConfig = PestsConfig()
+
+    @Expose
+    @Category(name = "Greenhouse", desc = "Greenhouse Settings")
+    val greenhouse: GreenhouseConfig = GreenhouseConfig()
 
     @Expose
     @ConfigOption(name = "Farming Fortune Display", desc = "")
@@ -112,9 +134,9 @@ class GardenConfig {
     val yawPitchDisplay: YawPitchDisplayConfig = YawPitchDisplayConfig()
 
     @Expose
-    @ConfigOption(name = "Sensitivity Reducer", desc = "")
+    @ConfigOption(name = "Mouse Sensitivity Reducer", desc = "")
     @Accordion
-    val sensitivityReducer: SensitivityReducerConfig = SensitivityReducerConfig()
+    val mouseSensitivityReducer: MouseSensitivityReducerConfig = MouseSensitivityReducerConfig()
 
     @Expose
     @ConfigOption(name = "Crop Start Location", desc = "")
@@ -142,6 +164,11 @@ class GardenConfig {
     val atmosphericFilterDisplay: AtmosphericFilterDisplayConfig = AtmosphericFilterDisplayConfig()
 
     @Expose
+    @ConfigOption(name = "Garden Tracker Uptime Settings", desc = "")
+    @Accordion
+    val trackerUptimeSettings: GardenTrackerUptimeConfig = GardenTrackerUptimeConfig()
+
+    @Expose
     @ConfigOption(name = "Hoe Levels Display", desc = "")
     @Accordion
     val hoeLevelDisplay: HoeLevelsDisplayConfig = HoeLevelsDisplayConfig()
@@ -150,6 +177,21 @@ class GardenConfig {
     @ConfigOption(name = "DNA Analyzer Solver", desc = "")
     @Accordion
     val dnaAnalyzerSolver: DnaAnalyzerSolverConfig = DnaAnalyzerSolverConfig()
+
+    @Expose
+    @ConfigOption(name = "Crop Fever Tracker", desc = "")
+    @Accordion
+    val cropFeverTracker: CropFeverTrackerConfig = CropFeverTrackerConfig()
+
+    @Expose
+    @ConfigOption(name = "See Through Farming", desc = "")
+    @Accordion
+    val seeThroughWindow: SeeThroughWindowConfig = SeeThroughWindowConfig()
+
+    @Expose
+    @ConfigOption(name = "Farming Toolkit", desc = "")
+    @Accordion
+    val farmingToolkit: FarmingToolkitIconConfig = FarmingToolkitIconConfig()
 
     @Expose
     @ConfigOption(
@@ -184,13 +226,12 @@ class GardenConfig {
 
     @Expose
     @ConfigOption(
-        name = "Enable Plot Borders",
-        desc = "Enable the use of F3 + G hotkey to show Garden plot borders. " +
-            "Similar to how later Minecraft version render chunk borders.",
+        name = "Plot Border Key",
+        desc = "Show Garden plot borders when pressing this key " +
+            "(similar to how F3 + G shows chunk borders).",
     )
-    @ConfigEditorBoolean
-    @FeatureToggle
-    var plotBorders: Boolean = true
+    @ConfigEditorKeybind(defaultKey = GLFW.GLFW_KEY_UNKNOWN)
+    var plotBorderKey: Int = GLFW.GLFW_KEY_UNKNOWN
 
     @Expose
     @ConfigOption(
@@ -204,6 +245,7 @@ class GardenConfig {
 
     @Expose
     @ConfigOption(name = "Log Book Stats", desc = "Show total visited/accepted/denied visitors stats.")
+    @SearchTag("logbook")
     @ConfigEditorBoolean
     @FeatureToggle
     var showLogBookStats: Boolean = true

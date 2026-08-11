@@ -4,30 +4,35 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.features.fishing.TotemOfCorruptionConfig.OutlineType
 import at.hannibal2.skyhanni.data.title.TitleManager
-import at.hannibal2.skyhanni.events.ConfigLoadEvent
-import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.minecraft.SkyHanniRenderWorldEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ColorUtils.toColor
 import at.hannibal2.skyhanni.utils.ConditionalUtils.onToggle
-import at.hannibal2.skyhanni.utils.EntityUtils
+import at.hannibal2.skyhanni.utils.EntityUtils.cleanName
+import at.hannibal2.skyhanni.utils.EntityUtils.getEntitiesNearby
 import at.hannibal2.skyhanni.utils.LocationUtils.distanceToPlayer
 import at.hannibal2.skyhanni.utils.LorenzVec
+import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
-import at.hannibal2.skyhanni.utils.RenderUtils.renderStrings
+import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.SoundUtils.playBeepSound
 import at.hannibal2.skyhanni.utils.TimeUnit
 import at.hannibal2.skyhanni.utils.TimeUtils.format
+import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.collection.TimeLimitedSet
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLessResets
+import at.hannibal2.skyhanni.utils.compat.appendWithColor
+import at.hannibal2.skyhanni.utils.compat.componentBuilder
 import at.hannibal2.skyhanni.utils.getLorenzVec
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawSphereInWorld
 import at.hannibal2.skyhanni.utils.render.WorldRenderUtils.drawSphereWireframeInWorld
+import at.hannibal2.skyhanni.utils.renderables.Renderable
+import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
+import net.minecraft.ChatFormatting
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.world.entity.decoration.ArmorStand
 import java.util.UUID
@@ -40,28 +45,39 @@ object TotemOfCorruption {
 
     private val config get() = SkyHanniMod.feature.fishing.totemOfCorruption
 
-    private var display = emptyList<String>()
-    private var totems: List<Totem> = emptyList()
+    private var display = emptyList<Renderable>()
+    private var totems = emptyList<Totem>()
+    private var allTotems = emptyList<Totem>()
     private val warnedTotems = TimeLimitedSet<UUID>(2.minutes)
 
     private val patternGroup = RepoPattern.group("fishing.totemofcorruption")
+
     private val totemNamePattern by patternGroup.pattern(
-        "totemname",
-        "§5§lTotem of Corruption",
+        "totemname-nocolor",
+        "Totem of Corruption",
     )
+
+    /**
+     * REGEX-TEST: Remaining: 2m 30s
+     * REGEX-TEST: Remaining: 5s
+     */
     private val timeRemainingPattern by patternGroup.pattern(
-        "timeremaining",
-        "§7Remaining: §e(?:(?<min>\\d+)m )?(?<sec>\\d+)s"
+        "timeremaining-nocolor",
+        "Remaining: (?:(?<min>\\d+)m )?(?<sec>\\d+)s",
     )
+
+    /**
+     * REGEX-TEST: Owner: hannibal2
+     */
     private val ownerPattern by patternGroup.pattern(
-        "owner",
-        "§7Owner: §e(?<owner>.+)"
+        "owner-nocolor",
+        "Owner: (?<owner>.+)",
     )
 
     @HandleEvent
-    fun onRenderOverlay(event: GuiRenderEvent.GuiOverlayRenderEvent) {
+    fun onGuiRenderOverlay() {
         if (!isOverlayEnabled() || display.isEmpty()) return
-        config.position.renderStrings(display, posLabel = "Totem of Corruption")
+        config.position.renderRenderables(display, posLabel = "Totem of Corruption")
     }
 
     @HandleEvent
@@ -69,15 +85,22 @@ object TotemOfCorruption {
         if (!event.repeatSeconds(2)) return
         if (!isOverlayEnabled()) return
 
-        totems = getTotems()
+        allTotems = getAllTotems()
+        totems = filterTotems()
+
+        val timeToWarn = config.warnWhenAboutToExpire.seconds
+        for (totem in totems) {
+            totem.tryWarn(timeToWarn)
+        }
+
         display = createDisplay()
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
+    fun onParticle(event: ParticleEvent) {
         if (!config.hideParticles) return
 
-        for (totem in totems) {
+        for (totem in allTotems) {
             if (event.type == ParticleTypes.WITCH && event.speed == 0f) {
                 if (totem.location.distance(event.location) < 4.0) {
                     event.cancel()
@@ -109,10 +132,11 @@ object TotemOfCorruption {
     }
 
     @HandleEvent
-    fun onConfigLoad(event: ConfigLoadEvent) {
+    fun onConfigLoad() {
         config.showOverlay.onToggle {
             display = emptyList()
             totems = emptyList()
+            allTotems = emptyList()
         }
     }
 
@@ -120,12 +144,13 @@ object TotemOfCorruption {
     fun onWorldChange() {
         display = emptyList()
         totems = emptyList()
+        allTotems = emptyList()
     }
 
     private fun getTimeRemaining(totem: ArmorStand): Duration? =
-        EntityUtils.getEntitiesNearby<ArmorStand>(totem.getLorenzVec(), 2.0)
+        totem.getLorenzVec().getEntitiesNearby<ArmorStand>(2.0)
             .firstNotNullOfOrNull { entity ->
-                timeRemainingPattern.matchMatcher(entity.name.formattedTextCompatLessResets()) {
+                timeRemainingPattern.matchMatcher(entity.cleanName) {
                     val minutes = group("min")?.toIntOrNull() ?: 0
                     val seconds = group("sec")?.toInt() ?: 0
                     (minutes * 60 + seconds).seconds
@@ -133,46 +158,64 @@ object TotemOfCorruption {
             }
 
     private fun getOwner(totem: ArmorStand): String? =
-        EntityUtils.getEntitiesNearby<ArmorStand>(totem.getLorenzVec(), 2.0)
+        totem.getLorenzVec().getEntitiesNearby<ArmorStand>(2.0)
             .firstNotNullOfOrNull { entity ->
-                ownerPattern.matchMatcher(entity.name.formattedTextCompatLessResets()) {
+                ownerPattern.matchMatcher(entity.cleanName) {
                     group("owner")
                 }
             }
 
-    private fun createDisplay() = buildList {
+    private fun createDisplay(): List<Renderable> = buildList {
         val totem = getTotemToShow() ?: return@buildList
-        add("§5§lTotem of Corruption")
-        add("§7Remaining: §e${totem.timeRemaining.format(TimeUnit.MINUTE)}")
-        add("§7Owner: §e${totem.ownerName}")
+        add("Totem of Corruption".asComponent().withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD))
+        add(
+            componentBuilder {
+                appendWithColor("Remaining: ", ChatFormatting.GRAY)
+                appendWithColor(totem.timeRemaining.format(TimeUnit.MINUTE), ChatFormatting.YELLOW)
+            },
+        )
+        add(
+            componentBuilder {
+                appendWithColor("Owner: ", ChatFormatting.GRAY)
+                appendWithColor(totem.ownerName, ChatFormatting.YELLOW)
+            },
+        )
+    }.map(Renderable::text)
+
+    private fun getTotemToShow(): Totem? {
+        val totems = totems.filter { it.distance < config.distanceThreshold }
+        totems.firstOrNull { it.ownerName == PlayerUtils.getName() }?.let { return it }
+        return totems.minByOrNull { it.distance }
     }
 
-    private fun getTotemToShow(): Totem? = totems
-        .filter { it.distance < config.distanceThreshold }
-        .maxByOrNull { it.timeRemaining }
-
-    private fun getTotems(): List<Totem> = EntityUtils.getEntitiesNextToPlayer<ArmorStand>(100.0)
-        .filter { totemNamePattern.matches(it.name.formattedTextCompatLessResets()) }.toList()
+    private fun getAllTotems(): List<Totem> = getEntitiesNearby<ArmorStand>(100.0)
+        .filter { totemNamePattern.matches(it.cleanName) }.toList()
         .mapNotNull { totem ->
             val timeRemaining = getTimeRemaining(totem) ?: return@mapNotNull null
             val owner = getOwner(totem) ?: return@mapNotNull null
-
-            val timeToWarn = config.warnWhenAboutToExpire.seconds
-            if (timeToWarn > 0.seconds && timeRemaining <= timeToWarn && totem.uuid !in warnedTotems) {
-                playBeepSound(0.5f)
-                TitleManager.sendTitle("§c§lTotem of Corruption §eabout to expire!")
-                warnedTotems.add(totem.uuid)
-            }
-            Totem(totem.getLorenzVec(), timeRemaining, owner)
+            Totem(totem.uuid, totem.getLorenzVec(), timeRemaining, owner)
         }
+
+    private fun filterTotems(): List<Totem> = allTotems.filter { !config.ownTotemOnly || it.isOwn() }
+
+    private fun Totem.tryWarn(timeToWarn: Duration) {
+        if (timeToWarn <= 0.seconds || timeRemaining > timeToWarn) return
+        if (uuid in warnedTotems) return
+        playBeepSound(0.5f)
+        TitleManager.sendTitle("§c§lTotem of Corruption §eabout to expire!")
+        warnedTotems.add(uuid)
+    }
 
     private fun isOverlayEnabled() = SkyBlockUtils.inSkyBlock && config.showOverlay.get()
     private fun isEffectiveAreaEnabled() = SkyBlockUtils.inSkyBlock && config.outlineType != OutlineType.NONE
 }
 
 private class Totem(
+    val uuid: UUID,
     val location: LorenzVec,
     val timeRemaining: Duration,
     val ownerName: String,
     val distance: Double = location.distanceToPlayer(),
-)
+) {
+    fun isOwn() = ownerName == PlayerUtils.getName()
+}

@@ -13,6 +13,7 @@ import at.hannibal2.skyhanni.data.jsonobjects.repo.ForcedRepoPerksJson
 import at.hannibal2.skyhanni.events.ConfigLoadEvent
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
+import at.hannibal2.skyhanni.events.MayorChangeEvent
 import at.hannibal2.skyhanni.events.RepositoryReloadEvent
 import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
@@ -24,6 +25,7 @@ import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockTime
 import at.hannibal2.skyhanni.utils.SkyBlockTime.Companion.SKYBLOCK_YEAR_MILLIS
@@ -36,7 +38,6 @@ import at.hannibal2.skyhanni.utils.collection.CollectionUtils.put
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.json.fromJson
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -61,14 +62,6 @@ object ElectionApi {
     private val electionOverPattern by group.pattern(
         "election.over",
         "§eThe election room is now closed\\. Clerk Seraphine is doing a final count of the votes\\.\\.\\.",
-    )
-
-    /**
-     * REGEX-TEST: Calendar and Events
-     */
-    val calendarGuiPattern by group.pattern(
-        "calendar.gui",
-        "Calendar and Events",
     )
 
     /**
@@ -146,6 +139,8 @@ object ElectionApi {
         if (!ElectionCandidate.JERRY.isActive()) return
         if (jerryExtraMayor.first != null && jerryExtraMayor.second.isInPast()) {
             jerryExtraMayor = null to SimpleTimeMark.farPast()
+            lastJerryExtraMayorReminder = SimpleTimeMark.now()
+
             ChatUtils.clickableChat(
                 "The Perkpocalypse Mayor has expired! Click here to update the new temporary Mayor.",
                 onClick = { HypixelCommands.calendar() },
@@ -165,7 +160,7 @@ object ElectionApi {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (electionOverPattern.matches(event.message)) {
             lastMayor = currentMayor
             currentMayor = ElectionCandidate.UNKNOWN
@@ -175,10 +170,9 @@ object ElectionApi {
 
     @HandleEvent(onlyOnSkyblock = true)
     fun onInventoryFullyOpened(event: InventoryFullyOpenedEvent) {
+        if (!CalendarApi.inCalendar) return
 
-        if (!calendarGuiPattern.matches(event.inventoryName)) return
-
-        val stack: ItemStack = event.inventoryItems.values.firstOrNull {
+        val stack: SafeItemStack = event.inventoryItems.values.firstOrNull {
             mayorHeadPattern.matchMatcher(it.hoverName.formattedTextCompatLeadingWhiteLessResets()) {
                 group("name") == "Jerry"
             } ?: false
@@ -248,8 +242,10 @@ object ElectionApi {
             val currentMayorName = mayor.name
             if (lastMayor?.name != currentMayorName) {
                 Perk.resetPerks()
+                val oldMayor = currentMayor
                 currentMayor = setAssumeMayorJson(currentMayorName, mayor.perks)
-                currentMinister = mayor.minister?.let { setAssumeMayorJson(it.name, listOf(it.perk)) }
+                currentMinister = mayor.minister?.let { setAssumeMayorJson(it.name, listOfNotNull(it.perk)) }
+                MayorChangeEvent(oldMayor, currentMayor).post()
             }
         }
     }
@@ -268,17 +264,22 @@ object ElectionApi {
         if (shouldAssumeMayor()) currentMayor = assumeMayorConfig.get().addAllPerks()
         assumeMayorConfig.onToggle {
             val mayor = assumeMayorConfig.get()
+            for (perk in Perk.entries) {
+                perk.isActive = false
+            }
 
+            val oldMayor = currentMayor
             if (!shouldAssumeMayor()) {
                 checkHypixelApi(forceReload = true)
             } else {
                 currentMayor = mayor.addAllPerks()
+                MayorChangeEvent(oldMayor, currentMayor, debug = true).post()
             }
         }
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Mayor Election")
 
         val assumeMayor = assumeMayorConfig.get()
@@ -307,9 +308,19 @@ object ElectionApi {
     val isDerpy get() = Perk.DOUBLE_MOBS_HP.isActive
     val isAura get() = Perk.WORK_HARDER.isActive
 
-    fun Int.derpy() = if (isDerpy) this / 2 else if (isAura) (this / 11 * 10) else this
+    fun Int.derpy(): Int {
+        var health = this
+        if (isDerpy) health /= 2
+        if (isAura) health = (health / 11 * 10)
+        return health
+    }
 
-    fun Int.ignoreDerpy() = if (isDerpy) this * 2 else if (isAura) (this * 1.1).toInt() else this
+    fun Int.ignoreDerpy(): Int {
+        var health = this
+        if (isDerpy) health *= 2
+        if (isAura) health = (health * 1.1).toInt()
+        return health
+    }
 
     var repoPerks: List<Perk>? = null
 
@@ -323,5 +334,15 @@ object ElectionApi {
             mayor?.addAdditionalPerks(data.perks)
             currentMayor = mayor
         }
+    }
+
+    fun getAllActivePerks(
+        includeMayor: Boolean = true,
+        includeMinister: Boolean = true,
+        includeRepoPerk: Boolean = true,
+    ): List<Perk> = buildList {
+        if (includeMayor) addAll(currentMayor?.activePerks.orEmpty())
+        if (includeMinister) addAll(currentMinister?.activePerks.orEmpty())
+        if (includeRepoPerk) addAll(repoPerks.orEmpty())
     }
 }

@@ -3,7 +3,7 @@ package at.hannibal2.skyhanni.features.misc
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.events.CheckRenderEntityEvent
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.entity.EntityEquipmentChangeEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ItemUtils.getSkullTexture
@@ -16,25 +16,24 @@ import net.minecraft.world.entity.decoration.ArmorStand
 @SkyHanniModule
 object LesserOrbHider {
 
-    private val config get() = SkyHanniMod.feature.misc
-    private val enabled = config.lesserOrbHider
+    private fun isEnabled() = SkyHanniMod.feature.misc.lesserOrbHider
     private val hiddenEntities = CollectionUtils.weakReferenceList<ArmorStand>()
 
-    private val LESSER_TEXTURE by lazy { SkullTextureHolder.getTexture("LESSER_ORB") }
+    private val LESSER_TEXTURE by SkullTextureHolder.texture("LESSER_ORB")
 
     @HandleEvent(onlyOnSkyblock = true)
     fun onArmorChange(event: EntityEquipmentChangeEvent<ArmorStand>) {
         val entity = event.entity
         val itemStack = event.newItemStack ?: return
 
-        if (event.isHand && itemStack.getSkullTexture() == LESSER_TEXTURE) {
+        if (event.isHand && LESSER_TEXTURE != null && itemStack.getSkullTexture() == LESSER_TEXTURE) {
             hiddenEntities.add(entity)
         }
     }
 
     @HandleEvent(onlyOnSkyblock = true)
     fun onCheckRender(event: CheckRenderEntityEvent<ArmorStand>) {
-        if (!enabled) return
+        if (!isEnabled()) return
 
         if (event.entity in hiddenEntities) {
             event.cancel()
@@ -42,8 +41,8 @@ object LesserOrbHider {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
-        if (!enabled) return
+    fun onParticle(event: ParticleEvent) {
+        if (!isEnabled()) return
         if (event.type != ParticleTypes.DUST) return
 
         for (armorStand in hiddenEntities) {

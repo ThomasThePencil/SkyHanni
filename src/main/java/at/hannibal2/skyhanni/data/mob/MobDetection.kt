@@ -1,17 +1,15 @@
 package at.hannibal2.skyhanni.data.mob
 
-import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.mob.MobFilter.isDisplayNpc
 import at.hannibal2.skyhanni.data.mob.MobFilter.isRealPlayer
 import at.hannibal2.skyhanni.data.mob.MobFilter.isSkyBlockMob
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
-import at.hannibal2.skyhanni.events.MobEvent
 import at.hannibal2.skyhanni.events.entity.EntityHealthUpdateEvent
-import at.hannibal2.skyhanni.events.minecraft.ClientDisconnectEvent
 import at.hannibal2.skyhanni.events.minecraft.packet.PacketReceivedEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.test.DevApi
 import at.hannibal2.skyhanni.utils.AllEntitiesGetter
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.EntityUtils
@@ -32,11 +30,15 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.ambient.Bat
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.Creeper
-import net.minecraft.world.entity.npc.Villager
+import net.minecraft.world.entity.npc.villager.Villager
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.Level
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import at.hannibal2.skyhanni.events.MobEvent.DeSpawn as DeSpawnEvent
+import at.hannibal2.skyhanni.events.MobEvent.FirstSeen as FirstSeenEvent
+import at.hannibal2.skyhanni.events.MobEvent.Hurt as HurtEvent
+import at.hannibal2.skyhanni.events.MobEvent.Spawn as SpawnEvent
 
 @SkyHanniModule
 object MobDetection {
@@ -57,7 +59,7 @@ object MobDetection {
 
     private const val MAX_RETRIES = 20 * 5
 
-    private val forceReset get() = !SkyHanniMod.feature.dev.mobDebug.enable
+    private val mainToggle get() = DevApi.mainToggles.mobDetection
 
     private val shouldClear: AtomicBoolean = AtomicBoolean(false)
 
@@ -68,7 +70,7 @@ object MobDetection {
         MobData.retries.clear()
     }
 
-    // TODO this is a unused debug function. maybe connect with a debug commmand or remove
+    // TODO this is a unused debug function. maybe connect with a debug command or remove
     private fun watchdog() {
         val world = MinecraftCompat.localWorldOrNull ?: return
         if (MobData.retries.any { it.value.entity.level() != world }) {
@@ -126,7 +128,7 @@ object MobDetection {
                 .filter { it !is ArmorStand && it !is LocalPlayer },
         )
 
-        if (forceReset) {
+        if (!mainToggle) {
             MobData.currentEntityLiving.clear() // Naturally removing the mobs using the despawn
         }
 
@@ -135,16 +137,16 @@ object MobDetection {
 
         MobData.notSeenMobs.removeIf(::canBeSeen)
 
-        if (forceReset) {
+        if (!mainToggle) {
             mobDetectionReset() // Ensure that all mobs are cleared 100%
         }
     }
 
     /** Splits the entity into player, displayNPC and other */
     private fun LivingEntity.getRoughType() = when {
-        this is Player && this.isRealPlayer() -> Mob.Type.PLAYER
-        this.isDisplayNpc() -> Mob.Type.DISPLAY_NPC
-        this.isSkyBlockMob() && !islandException() -> Mob.Type.BASIC
+        this is Player && this.isRealPlayer() -> MobCategory.PLAYER
+        this.isDisplayNpc() -> MobCategory.DISPLAY_NPC
+        this.isSkyBlockMob() && !islandException() -> MobCategory.BASIC
         else -> null
     }
 
@@ -163,25 +165,26 @@ object MobDetection {
     private fun canBeSeen(mob: Mob): Boolean {
         val isVisible = !mob.isInvisible() && mob.canBeSeen()
         if (isVisible) {
-            when (mob.mobType) {
-                Mob.Type.PLAYER -> MobEvent.FirstSeen.Player(mob)
-                Mob.Type.SUMMON -> MobEvent.FirstSeen.Summon(mob)
-                Mob.Type.SPECIAL -> MobEvent.FirstSeen.Special(mob)
-                Mob.Type.PROJECTILE -> MobEvent.FirstSeen.Projectile(mob)
-                Mob.Type.DISPLAY_NPC -> MobEvent.FirstSeen.DisplayNpc(mob)
-                Mob.Type.BASIC, Mob.Type.DUNGEON, Mob.Type.BOSS, Mob.Type.SLAYER -> MobEvent.FirstSeen.SkyblockMob(mob)
+            when (mob.category) {
+                MobCategory.PLAYER -> FirstSeenEvent.Player(mob)
+                MobCategory.SUMMON -> FirstSeenEvent.Summon(mob)
+                MobCategory.SPECIAL -> FirstSeenEvent.Special(mob)
+                MobCategory.PROJECTILE -> FirstSeenEvent.Projectile(mob)
+                MobCategory.DISPLAY_NPC -> FirstSeenEvent.DisplayNpc(mob)
+                MobCategory.BASIC, MobCategory.DUNGEON, MobCategory.BOSS, MobCategory.SLAYER -> FirstSeenEvent.SkyblockMob(mob)
             }.post()
         }
         return isVisible
     }
 
     /**@return a false means that it should try again (later)*/
-    private fun entitySpawn(entity: LivingEntity, roughType: Mob.Type): Boolean {
-        when (roughType) {
-            Mob.Type.PLAYER -> MobEvent.Spawn.Player(MobFactories.player(entity)).post()
+    @Suppress("ReturnCount")
+    private fun entitySpawn(entity: LivingEntity, roughCategory: MobCategory): Boolean {
+        when (roughCategory) {
+            MobCategory.PLAYER -> SpawnEvent.Player(MobFactories.player(entity)).post()
 
-            Mob.Type.DISPLAY_NPC -> return MobFilter.createDisplayNpc(entity)
-            Mob.Type.BASIC -> {
+            MobCategory.DISPLAY_NPC -> return MobFilter.createDisplayNpc(entity)
+            MobCategory.BASIC -> {
                 val (result, mob) = MobFilter.createSkyblockEntity(entity)
                 when (result) {
                     MobData.Result.NotYetFound -> return false
@@ -189,13 +192,13 @@ object MobDetection {
                     MobData.Result.SomethingWentWrong -> return mobDetectionError("Something Went Wrong!")
                     MobData.Result.Found -> {
                         if (mob == null) return mobDetectionError("Mob is null even though result is Found")
-                        when (mob.mobType) {
-                            Mob.Type.SUMMON -> MobEvent.Spawn.Summon(mob)
-                            Mob.Type.BASIC, Mob.Type.DUNGEON, Mob.Type.BOSS, Mob.Type.SLAYER -> MobEvent.Spawn.SkyblockMob(mob)
-                            Mob.Type.SPECIAL -> MobEvent.Spawn.Special(mob)
-                            Mob.Type.PROJECTILE -> MobEvent.Spawn.Projectile(mob)
-                            Mob.Type.DISPLAY_NPC -> MobEvent.Spawn.DisplayNpc(mob) // Needed for some special cases
-                            Mob.Type.PLAYER -> return mobDetectionError("An Player Ended Here. How?")
+                        when (mob.category) {
+                            MobCategory.SUMMON -> SpawnEvent.Summon(mob)
+                            MobCategory.BASIC, MobCategory.DUNGEON, MobCategory.BOSS, MobCategory.SLAYER -> SpawnEvent.SkyblockMob(mob)
+                            MobCategory.SPECIAL -> SpawnEvent.Special(mob)
+                            MobCategory.PROJECTILE -> SpawnEvent.Projectile(mob)
+                            MobCategory.DISPLAY_NPC -> SpawnEvent.DisplayNpc(mob) // Needed for some special cases
+                            MobCategory.PLAYER -> return mobDetectionError("An Player Ended Here. How?")
                         }.post()
                     }
                 }
@@ -222,19 +225,19 @@ object MobDetection {
                 val entity = EntityUtils.getEntityByID(id) as? Bat ?: return@drainForEach
                 if (MobData.entityToMob[entity] != null) return@drainForEach
                 removeRetry(entity)
-                MobEvent.Spawn.Projectile(MobFactories.projectile(entity, "Spirit Scepter Bat")).post()
+                SpawnEvent.Projectile(MobFactories.projectile(entity, "Spirit Scepter Bat")).post()
             }
 
             EntityPacketType.VILLAGER -> {
                 val entity = EntityUtils.getEntityByID(id) as? Villager ?: return@drainForEach
                 val mob = MobData.entityToMob[entity]
-                if (mob != null && mob.mobType == Mob.Type.DISPLAY_NPC) {
-                    MobEvent.DeSpawn.DisplayNpc(mob)
+                if (mob != null && mob.category == MobCategory.DISPLAY_NPC) {
+                    DeSpawnEvent.DisplayNpc(mob)
                     addRetry(entity)
                     return@drainForEach
                 }
                 getRetry(entity)?.let {
-                    if (it.roughType == Mob.Type.DISPLAY_NPC) {
+                    if (it.roughCategory == MobCategory.DISPLAY_NPC) {
                         removeRetry(entity)
                         addRetry(entity)
                     }
@@ -246,7 +249,7 @@ object MobDetection {
                 if (MobData.entityToMob[entity] != null) return@drainForEach
                 if (!entity.isPowered) return@drainForEach
                 removeRetry(entity)
-                MobEvent.Spawn.Special(MobFactories.special(entity, "Creeper Veil")).post()
+                SpawnEvent.Special(MobFactories.special(entity, "Creeper Veil")).post()
             }
         }
     }
@@ -254,9 +257,10 @@ object MobDetection {
     @HandleEvent
     fun onEntityHealthUpdateEvent(event: EntityHealthUpdateEvent) {
         when {
-            event.entity is Bat && event.health == 6 -> {
+            // Very high false positive rate
+            /*event.entity is Bat && event.health == 6 -> {
                 entityFromPacket.add(EntityPacketType.SPIRIT_BAT to event.entity.id)
-            }
+            }*/
 
             event.entity is Villager && event.health != 20 -> {
                 entityFromPacket.add(EntityPacketType.VILLAGER to event.entity.id)
@@ -279,22 +283,22 @@ object MobDetection {
         allEntitiesViaPacketId.remove(entity.id)
     }
 
-    private fun Mob.createDeSpawnEvent() = when (this.mobType) {
-        Mob.Type.PLAYER -> MobEvent.DeSpawn.Player(this)
-        Mob.Type.SUMMON -> MobEvent.DeSpawn.Summon(this)
-        Mob.Type.SPECIAL -> MobEvent.DeSpawn.Special(this)
-        Mob.Type.PROJECTILE -> MobEvent.DeSpawn.Projectile(this)
-        Mob.Type.DISPLAY_NPC -> MobEvent.DeSpawn.DisplayNpc(this)
-        Mob.Type.BASIC, Mob.Type.DUNGEON, Mob.Type.BOSS, Mob.Type.SLAYER -> MobEvent.DeSpawn.SkyblockMob(this)
+    private fun Mob.createDeSpawnEvent() = when (this.category) {
+        MobCategory.PLAYER -> DeSpawnEvent.Player(this)
+        MobCategory.SUMMON -> DeSpawnEvent.Summon(this)
+        MobCategory.SPECIAL -> DeSpawnEvent.Special(this)
+        MobCategory.PROJECTILE -> DeSpawnEvent.Projectile(this)
+        MobCategory.DISPLAY_NPC -> DeSpawnEvent.DisplayNpc(this)
+        MobCategory.BASIC, MobCategory.DUNGEON, MobCategory.BOSS, MobCategory.SLAYER -> DeSpawnEvent.SkyblockMob(this)
     }
 
-    fun postMobHurtEvent(mob: Mob, source: DamageSource, amount: Float) = when (mob.mobType) {
-        Mob.Type.PLAYER -> MobEvent.Hurt.Player(mob, source, amount)
-        Mob.Type.SUMMON -> MobEvent.Hurt.Summon(mob, source, amount)
-        Mob.Type.SPECIAL -> MobEvent.Hurt.Special(mob, source, amount)
-        Mob.Type.PROJECTILE -> MobEvent.Hurt.Projectile(mob, source, amount)
-        Mob.Type.DISPLAY_NPC -> MobEvent.Hurt.DisplayNpc(mob, source, amount)
-        Mob.Type.BASIC, Mob.Type.DUNGEON, Mob.Type.BOSS, Mob.Type.SLAYER -> MobEvent.Hurt.SkyblockMob(mob, source, amount)
+    fun postMobHurtEvent(mob: Mob, source: DamageSource, amount: Float) = when (mob.category) {
+        MobCategory.PLAYER -> HurtEvent.Player(mob, source, amount)
+        MobCategory.SUMMON -> HurtEvent.Summon(mob, source, amount)
+        MobCategory.SPECIAL -> HurtEvent.Special(mob, source, amount)
+        MobCategory.PROJECTILE -> HurtEvent.Projectile(mob, source, amount)
+        MobCategory.DISPLAY_NPC -> HurtEvent.DisplayNpc(mob, source, amount)
+        MobCategory.BASIC, MobCategory.DUNGEON, MobCategory.BOSS, MobCategory.SLAYER -> HurtEvent.SkyblockMob(mob, source, amount)
     }.post()
 
     private fun handleRetries() {
@@ -326,7 +330,7 @@ object MobDetection {
                 // iterator.remove()
                 // continue
             }
-            if (!entitySpawn(entity, retry.roughType)) {
+            if (!entitySpawn(entity, retry.roughCategory)) {
                 retry.times++
                 continue
             }
@@ -379,14 +383,14 @@ object MobDetection {
     }
 
     @HandleEvent
-    fun onDisconnect(event: ClientDisconnectEvent) {
+    fun onDisconnect() {
         shouldClear.set(true)
     }
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Mob Detection")
-        if (forceReset) {
+        if (!mainToggle) {
             event.addData("Mob Detection is manually disabled!")
         } else {
             event.addIrrelevant {

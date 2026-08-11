@@ -9,7 +9,6 @@ import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.events.MessageSendToServerEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ChatUtils.senderIsSkyhanni
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.NumberUtil.formatIntOrUserError
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
@@ -62,12 +61,12 @@ object OpenLastStorage {
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) {
-        event.register("shlastopened") {
+        event.registerBrigadier("shlastopened") {
             description = "Opens the storage page last accessed by either /ec or /bp"
             category = CommandCategory.USERS_ACTIVE
             aliases = listOf("shlo")
-            callback {
-                val storage = storage ?: return@callback
+            simpleCallback {
+                val storage = storage ?: return@simpleCallback
                 if (isEnabled() && SkyBlockUtils.inSkyBlock) {
                     openLastStoragePage(storage.type)
                 } else {

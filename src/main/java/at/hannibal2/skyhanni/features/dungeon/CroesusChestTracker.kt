@@ -21,6 +21,8 @@ import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.utils.InventoryUtils.getAmountInInventory
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
+import at.hannibal2.skyhanni.utils.ItemUtils.getCleanLore
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.LocationUtils
 import at.hannibal2.skyhanni.utils.LorenzColor
@@ -32,14 +34,14 @@ import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderDisplayHelper
 import at.hannibal2.skyhanni.utils.RenderUtils.highlight
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
+import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.toSingletonListOrEmpty
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.primitives.text
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import kotlin.time.Duration.Companion.days
 
@@ -50,38 +52,61 @@ object CroesusChestTracker {
 
     private val patternGroup = RepoPattern.group("dungeon.croesus")
 
-    private val croesusPattern by patternGroup.pattern("inventory", "Croesus")
-    private val croesusEmptyPattern by patternGroup.pattern("empty", "§cNo treasures!")
-    private val kismetPattern by patternGroup.pattern("kismet.reroll", "§aReroll Chest")
-    private val kismetUsedInChestPattern by patternGroup.pattern("kismet.used", "§aYou already rerolled a chest!")
+    /**
+     * REGEX-TEST: (1/3) Croesus
+     * REGEX-TEST: Croesus
+     */
+    private val croesusPattern by patternGroup.pattern("inventory", "(?:\\(\\d+/\\d+\\) )?Croesus")
 
     /**
-     * REGEX-TEST: §eFloor V
+     * REGEX-TEST: No treasures!
      */
-    private val floorPattern by patternGroup.pattern("chest.floor", "§eFloor (?<floor>[IV]+)")
-    private val masterPattern by patternGroup.pattern("chest.master", ".*Master.*")
+    private val croesusEmptyPattern by patternGroup.pattern("empty.colorless", "No treasures!")
 
     /**
-     * REGEX-TEST: §eInfernal Tier
+     * REGEX-TEST: Reroll Chest
      */
-    private val kuudraPattern by patternGroup.pattern("chest.kuudra", "§e(?<tier>Basic|Hot|Burning|Fiery|Infernal) Tier")
+    private val kismetPattern by patternGroup.pattern("kismet.reroll.colorless", "Reroll Chest")
 
     /**
-     * REGEX-TEST: §aNo more chests to open!
+     * REGEX-TEST: You already rerolled a chest!
      */
-    private val keyUsedPattern by patternGroup.pattern("chest.state.keyused", "§aNo more chests to open!")
+    private val kismetUsedInChestPattern by patternGroup.pattern("kismet.used.colorless", "You already rerolled a chest!")
 
     /**
-     * REGEX-TEST: §7Opened Chest: §fWood
+     * REGEX-TEST: Floor V
      */
-    private val openedPattern by patternGroup.pattern("chest.state.opened", "§.Opened [cC]hest:.*")
+    private val floorPattern by patternGroup.pattern("chest.floor.colorless", "Floor (?<floor>[IV]+)")
 
     /**
-     * REGEX-TEST: §cNo chests opened yet!
+     * REGEX-TEST: Master Mode The Catacombs
      */
-    private val unopenedPattern by patternGroup.pattern("chest.state.unopened", "§cNo chests opened yet!")
+    private val masterPattern by patternGroup.pattern("chest.master.colorless", ".*Master.*")
 
-    private val kismetUsedInCroesusPattern by patternGroup.pattern("chest.state.kismet.used", " §8§mKismet Feather")
+    /**
+     * REGEX-TEST: Infernal Tier
+     */
+    private val kuudraPattern by patternGroup.pattern("chest.kuudra.colorless", "(?<tier>Basic|Hot|Burning|Fiery|Infernal) Tier")
+
+    /**
+     * REGEX-TEST: No more chests to open!
+     */
+    private val keyUsedPattern by patternGroup.pattern("chest.state.keyused.colorless", "No more chests to open!")
+
+    /**
+     * REGEX-TEST: Opened Chest: Wood
+     */
+    private val openedPattern by patternGroup.pattern("chest.state.opened.colorless", "Opened [cC]hest:.*")
+
+    /**
+     * REGEX-TEST: No chests opened yet!
+     */
+    private val unopenedPattern by patternGroup.pattern("chest.state.unopened.colorless", "No chests opened yet!")
+
+    /**
+     * WRAPPED-REGEX-TEST: " Kismet Feather"
+     */
+    private val kismetUsedInCroesusPattern by patternGroup.pattern("chest.state.kismet.used.styled", " §mKismet Feather")
 
     private const val EMPTY_SLOT = 22
     private const val FRONT_ARROW_SLOT = 53
@@ -103,6 +128,13 @@ object CroesusChestTracker {
 
     private var display: List<Renderable>? = null
 
+    private val chestSlots = listOf(
+        10..16,
+        19..25,
+        28..34,
+        37..43,
+    )
+
     private val croesusChests get() = ProfileStorageData.profileSpecific?.dungeons?.runs
 
     @HandleEvent(GuiContainerEvent.BackgroundDrawnEvent::class, priority = HandleEvent.LOW, onlyOnSkyblock = true)
@@ -110,17 +142,14 @@ object CroesusChestTracker {
         if (!SkyHanniMod.feature.dungeon.croesusUnopenedChestTracker) return
 
         if (!inCroesusInventory || croesusEmpty) return
-        for ((run, slot) in InventoryUtils.getItemsInOpenChest()
-            .mapNotNull { slot -> runSlots(slot.containerSlot, slot) }) {
+        InventoryUtils.getItemsInOpenChest().forEach { slot ->
+            if (chestSlots.none { it.contains(slot.containerSlot) }) return@forEach
 
-            // If one chest is null every followup chest is null. Therefore, an early return is possible
-            if (run.floor == null) return
+            val lore = slot.item.getCleanLore()
+            if (lore.isEmpty()) return@forEach
 
-            val state = run.openState ?: OpenedState.UNOPENED
-
-            if (state != OpenedState.KEY_USED) {
-                slot.highlight(if (state == OpenedState.OPENED) LorenzColor.DARK_AQUA else LorenzColor.DARK_PURPLE)
-            }
+            val color = (OpenedState.getOpenState(lore) ?: return@forEach).color ?: return@forEach
+            slot.highlight(color)
         }
     }
 
@@ -152,43 +181,33 @@ object CroesusChestTracker {
         kismetAmountCache = getKismetAmount()
     }
 
-    private fun checkChests(inventory: Map<Int, ItemStack?>) {
+    private fun checkChests(inventory: Map<Int, SafeItemStack?>) {
         for ((run, item) in inventory.mapNotNull { (key, value) -> runSlots(key, value) }) {
             if (item == null) {
                 run.setValuesNull()
                 continue
             }
 
-            val lore = item.getLore()
+            val lore = item.getCleanLore()
+            val itemName = item.cleanName
 
             if (run.floor == null || run.floor == "F0") run.floor =
-                (if (masterPattern.matches(item.hoverName.formattedTextCompatLeadingWhiteLessResets())) "M" else "F") + (
+                (if (masterPattern.matches(itemName)) "M" else "F") + (
                     lore.firstNotNullOfOrNull {
                         floorPattern.matchMatcher(it) { group("floor").romanToDecimal() }
                     } ?: "0"
                     )
-            if (run.floor == "F0" && kuudraPattern.matches(item.hoverName.formattedTextCompatLeadingWhiteLessResets())) run.floor =
+            if (run.floor == "F0" && kuudraPattern.matches(itemName)) run.floor =
                 ("T" + KuudraApi.getKuudraRunTierNumber(lore.firstNotNullOfOrNull { kuudraPattern.matchMatcher(it) { group("tier") } }))
-            run.openState = when {
-                keyUsedPattern.anyMatches(lore) -> OpenedState.KEY_USED
-                openedPattern.anyMatches(lore) -> OpenedState.OPENED
-                unopenedPattern.anyMatches(lore) -> OpenedState.UNOPENED
-                else -> ErrorManager.logErrorStateWithData(
-                    "Croesus Chest couldn't be read correctly.",
-                    "Open state check failed for chest.",
-                    "run" to run,
-                    "lore" to lore,
-                ).run { null }
-            }
-            run.kismetUsed = kismetUsedInCroesusPattern.anyMatches(lore)
+            run.openState = OpenedState.getOpenState(lore)
         }
     }
 
     private fun pageSetup(event: InventoryFullyOpenedEvent) {
         inCroesusInventory = true
         pageSwitchable = true
-        croesusEmpty = croesusEmptyPattern.matches(event.inventoryItems[EMPTY_SLOT]?.hoverName.formattedTextCompatLeadingWhiteLessResets())
-        if (event.inventoryItems[BACK_ARROW_SLOT]?.item != Items.ARROW) {
+        croesusEmpty = croesusEmptyPattern.matches(event.inventoryItems[EMPTY_SLOT]?.cleanName)
+        if (event.inventoryItems[BACK_ARROW_SLOT]?.`is`(Items.ARROW) != true) {
             currentPage = 0
         }
     }
@@ -196,7 +215,6 @@ object CroesusChestTracker {
     private fun DungeonRunInfo.setValuesNull() {
         floor = null
         openState = null
-        kismetUsed = null
     }
 
     @HandleEvent(InventoryCloseEvent::class)
@@ -231,8 +249,8 @@ object CroesusChestTracker {
     fun onRenderItemTip(event: RenderItemTipEvent) {
         if (!config.kismetStackSize) return
         if (chestInventory == null) return
-        if (!kismetPattern.matches(event.stack.hoverName.formattedTextCompatLeadingWhiteLessResets())) return
-        if (kismetUsedInChestPattern.matches(event.stack.getLore().lastOrNull())) return
+        if (!kismetPattern.matches(event.stack.cleanName)) return
+        if (kismetUsedInChestPattern.matches(event.stack.getCleanLore().lastOrNull())) return
         event.stackTip = "§a$kismetAmountCache"
     }
 
@@ -241,8 +259,9 @@ object CroesusChestTracker {
         if (!config.showUsedKismets) return
         if (!inCroesusInventory) return
         if (event.slot.containerSlot != event.slot.index) return
-        val run = croesusSlotMapToRun(event.slot.containerSlot) ?: return
-        if (!getKismetUsed(run)) return
+        croesusSlotMapToRun(event.slot.containerSlot) ?: return
+        val styledLore = event.stack.getLore().map { it.removeColor(keepFormatting = true) }
+        if (!kismetUsedInCroesusPattern.anyMatches(styledLore)) return
         event.offsetY = -1
         event.offsetX = -9
         event.stackTip = "§a✔"
@@ -260,7 +279,7 @@ object CroesusChestTracker {
     }
 
     // TODO Replace y > 103 check with a better "is actively playing Cata/Kuudra" heuristic
-    private fun isInDH(): Boolean = IslandType.DUNGEON_HUB.isCurrent() && LocationUtils.playerLocation().y > 103.0
+    private fun isInDH(): Boolean = IslandType.DUNGEON_HUB.isInIsland() && LocationUtils.playerLocation().y > 103.0
 
     init {
         RenderDisplayHelper(
@@ -300,6 +319,7 @@ object CroesusChestTracker {
             val next = iterator.next()
             if (next.floor == null) {
                 iterator.remove()
+                continue
             }
             if (next.runTime == null) {
                 next.runTime = SimpleTimeMark.now()
@@ -307,6 +327,7 @@ object CroesusChestTracker {
             val sinceRun = next.runTime?.passedSince() ?: 0.days // purely exists for pre-addition runs
             if (sinceRun > 3.days) {
                 iterator.remove()
+                continue
             }
             if (next.openState == OpenedState.UNOPENED) unopenedChests++
         }
@@ -332,8 +353,6 @@ object CroesusChestTracker {
 
     private fun getRun0(run: Int = currentRunIndex) = croesusChests?.takeIf { run < it.size }?.get(run)
 
-    private fun getKismetUsed(runIndex: Int) = getRun0(runIndex)?.kismetUsed ?: false
-
     private fun getKismetAmount() = kismetInternalName.getAmountInSacks() + kismetInternalName.getAmountInInventory()
 
     private fun croesusSlotMapToRun(slotId: Int) = when (slotId) {
@@ -344,7 +363,7 @@ object CroesusChestTracker {
         else -> null
     }?.let { it + currentPage * 28 }
 
-    private fun ItemStack.isArrow() = this.item == Items.ARROW
+    private fun SafeItemStack.isArrow() = this.`is`(Items.ARROW)
 
     private inline fun <reified T> runSlots(slotId: Int, any: T) =
         croesusSlotMapToRun(slotId)?.getRun()?.let { it to any }
@@ -360,9 +379,30 @@ object CroesusChestTracker {
         } ?: -1
         ) + 1
 
-    enum class OpenedState {
-        UNOPENED,
-        OPENED,
-        KEY_USED,
+    enum class OpenedState(val color: LorenzColor?) {
+        UNOPENED(LorenzColor.DARK_PURPLE),
+        OPENED(LorenzColor.DARK_AQUA),
+        KEY_USED(null),
+        ;
+
+        companion object {
+            fun getOpenState(lore: List<String>): OpenedState? {
+                return when {
+                    keyUsedPattern.anyMatches(lore) -> KEY_USED
+                    openedPattern.anyMatches(lore) -> OPENED
+                    unopenedPattern.anyMatches(lore) -> UNOPENED
+                    kuudraPattern.anyMatches(lore) -> UNOPENED
+                    // Kuudra doesn't have an unopened line, but it DOES have opened line, this has to be after opened in when branch.
+                    else -> {
+                        ErrorManager.logErrorStateWithData(
+                            "Croesus Chest couldn't be read correctly.",
+                            "Open state check failed for chest.",
+                            "lore" to lore,
+                        )
+                        null
+                    }
+                }
+            }
+        }
     }
 }

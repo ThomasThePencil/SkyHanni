@@ -1,5 +1,6 @@
 package at.hannibal2.skyhanni.data.hotx
 
+import at.hannibal2.skyhanni.config.core.config.Position
 import at.hannibal2.skyhanni.data.IslandTypeTag
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
@@ -7,12 +8,15 @@ import at.hannibal2.skyhanni.test.command.ErrorManager
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.InventoryDetector
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
+import at.hannibal2.skyhanni.utils.ItemUtils.getLoreComponent
+import at.hannibal2.skyhanni.utils.ItemUtils.takeUnlessEmpty
 import at.hannibal2.skyhanni.utils.RegexUtils.indexOfFirstMatch
 import at.hannibal2.skyhanni.utils.RegexUtils.matchGroup
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
+import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import net.minecraft.world.inventory.Slot
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -37,6 +41,8 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
     protected abstract val notUnlockedPattern: Pattern
     protected abstract val heartItemPattern: Pattern
     protected abstract val resetItemPattern: Pattern
+    abstract val position: Position
+    abstract val shouldShowDisplay: Boolean
 
     /**
      * Needs a group "token" (only digits)
@@ -49,7 +55,7 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
     protected abstract val resetTokensPattern: Pattern
     protected abstract val readingLevelTransform: Matcher.() -> Int
 
-    val inApplicableIsland: Boolean get() = applicableIslandType.inAny()
+    val inApplicableIsland: Boolean get() = islandTypeTag.isInIsland()
     val inInventory: Boolean get() = treeInventoryDetector.isInside()
     var heartItem: Slot? = null
 
@@ -76,15 +82,16 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
     }
 
     fun Slot.parse() {
-        val item = this.item ?: return
+        val item = this.item.takeUnlessEmpty() ?: return
 
         if (this.handleCurrency()) return
 
-        val entry = data.firstOrNull { it.guiNamePattern.matches(item.hoverName.formattedTextCompatLeadingWhiteLessResets()) } ?: return
+        val entry = data.firstOrNull { it.guiNamePattern.matches(item.cleanName) } ?: return
         entry.slot = this
         entry.item = item
 
-        val lore = item.getLore().takeIf { it.isNotEmpty() } ?: return
+        val rawLore = item.getLore()
+        val lore = item.getLoreComponent().takeIf { it.isNotEmpty() }?.map { it.string.removeColor() } ?: return
 
         if (entry != core && notUnlockedPattern.matches(lore.last())) {
             entry.rawLevel = 0
@@ -95,7 +102,8 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
 
         entry.isUnlocked = true
 
-        entry.rawLevel = levelPattern.matchMatcher(lore.first(), readingLevelTransform) ?: entry.maxLevel
+        // This needs color codes
+        entry.rawLevel = levelPattern.matchMatcher(rawLore.first(), readingLevelTransform) ?: entry.maxLevel
 
         // raw level to ignore the blue egg buff
         if (entry.rawLevel > entry.maxLevel) {
@@ -132,11 +140,11 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
      * @return True means it read an item, false means it did not.
      */
     protected fun Slot.handleCurrency(): Boolean {
-        val item = this.item ?: return false
+        val item = this.item.takeUnlessEmpty() ?: return false
 
         val isHeartItem = when {
-            heartItemPattern.matches(item.hoverName.formattedTextCompatLeadingWhiteLessResets()) -> true
-            resetItemPattern.matches(item.hoverName.formattedTextCompatLeadingWhiteLessResets()) -> false
+            heartItemPattern.matches(item.cleanName) -> true
+            resetItemPattern.matches(item.cleanName) -> false
             else -> return false
         }
 
@@ -146,7 +154,7 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
             heartItem = this
         }
 
-        val lore = item.getLore()
+        val lore = item.getLoreComponent().map { it.string.removeColor() }
 
         val tokenPattern = if (isHeartItem) heartTokensPattern else resetTokensPattern
         lore@ for (line in lore) {
@@ -171,7 +179,7 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
 
     private val treeInventoryDetector by lazy {
         InventoryDetector(
-            pattern = inventoryPattern,
+            repoPattern = { inventoryPattern },
             onOpenInventory = {
                 DelayedRun.runNextTick {
                     InventoryUtils.getItemsInOpenChest().forEach { it.parse() }
@@ -190,26 +198,26 @@ abstract class HotxHandler<Data : HotxData<Reward>, Reward, RotPerkE>(val data: 
 
     protected open val rotatingPerkPattern: Pattern by lazy { HotxPatterns.rotatingPerkPattern }
     protected abstract val rotatingPerks: List<RotPerkE>
-    protected abstract val applicableIslandType: IslandTypeTag
+    protected abstract val islandTypeTag: IslandTypeTag
     abstract var currentRotPerk: RotPerkE?
         protected set
 
     abstract val resetChatPattern: Pattern
 
-    abstract fun extraChatHandling(event: SkyHanniChatEvent)
+    abstract fun extraChatHandling(event: SkyHanniChatEvent.Allow)
 
-    open fun onChat(event: SkyHanniChatEvent) {
-        if (resetChatPattern.matches(event.message)) {
+    open fun onChat(event: SkyHanniChatEvent.Allow) {
+        if (resetChatPattern.matches(event.cleanMessage)) {
             resetTree()
             return
         }
         extraChatHandling(event)
     }
 
-    abstract fun tryBlock(event: SkyHanniChatEvent)
+    abstract fun tryBlock(event: SkyHanniChatEvent.Allow)
 
-    fun tryReadRotatingPerkChat(event: SkyHanniChatEvent): Boolean? {
-        rotatingPerkPattern.matchMatcher(event.message) {
+    fun tryReadRotatingPerkChat(event: SkyHanniChatEvent.Allow): Boolean? {
+        rotatingPerkPattern.matchMatcher(event.cleanMessage) {
             val perkString = group("perk")
             val foundPerk = rotatingPerks.firstNotNullOfOrNull { perk ->
                 if (!perk.chatPattern.matches(perkString)) return@firstNotNullOfOrNull null

@@ -3,6 +3,7 @@ package at.hannibal2.skyhanni.test
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.enoughupdates.EnoughUpdatesRepoManager
 import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.api.hypixelapi.HypixelLocationApi
 import at.hannibal2.skyhanni.config.commands.CommandCategory
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
 import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierArguments
@@ -13,7 +14,6 @@ import at.hannibal2.skyhanni.data.repo.SkyHanniRepoManager
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.features.misc.CurrentPing
 import at.hannibal2.skyhanni.features.misc.TpsCounter
-import at.hannibal2.skyhanni.features.misc.limbo.LimboTimeTracker
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.NeuItems
@@ -23,9 +23,7 @@ import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.StringUtils.equalsIgnoreColor
 import at.hannibal2.skyhanni.utils.TimeUtils.format
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.system.PlatformUtils
-import at.hannibal2.skyhanni.utils.toLorenzVec
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -132,11 +130,11 @@ object DebugCommand {
             return
         }
 
-        if (SkyBlockUtils.currentIsland != HypixelData.skyBlockIsland) {
+        if (SkyBlockUtils.currentIsland != HypixelLocationApi.island) {
             event.addData {
                 add("using a test island!")
                 add("test island: ${SkyBlockIslandTest.testIsland}")
-                add("real island: ${HypixelData.skyBlockIsland}")
+                add("real island: ${HypixelLocationApi.island}")
             }
             return
         }
@@ -147,9 +145,8 @@ object DebugCommand {
             add("skyBlockArea:")
             add("  scoreboard: '${SkyBlockUtils.scoreboardArea}'")
             add("  graph network: '${SkyBlockUtils.graphArea}'")
-            with(MinecraftCompat.localPlayer.blockPosition().toLorenzVec().roundTo(1)) {
-                add(" /shtestwaypoint $x $y $z pathfind")
-            }
+            val location = PlayerUtils.blockPosition().toLocalFormat()
+            add(" /shtestwaypoint $location pathfind")
             add("isOnAlphaServer: '${SkyBlockUtils.isOnAlphaServer}'")
         }
     }
@@ -157,7 +154,7 @@ object DebugCommand {
     // todo clean this up so that it commonly reports on any AbstractRepoManager
     private fun repoData(event: DebugDataCollectEvent) {
         event.title("Repo Information")
-        val config = SkyHanniMod.feature.dev.repo
+        val config = DevApi.config.repo
 
         val hasDefaultSettings = config.location.hasDefaultSettings()
         val unsuccessfulConstants = SkyHanniRepoManager.getFailedConstants()
@@ -177,7 +174,7 @@ object DebugCommand {
                 }
             }
 
-            val neuRepoConfig = SkyHanniMod.feature.dev.neuRepo
+            val neuRepoConfig = DevApi.config.neuRepo
             add(" neuRepoAutoUpdate: ${neuRepoConfig.repoAutoUpdate}")
 
             if (!neuRepoConfig.location.hasDefaultSettings()) {
@@ -186,7 +183,7 @@ object DebugCommand {
                 add(" neu repo location: default")
             }
 
-            add(" loaded neu items: ${NeuItems.allNeuRepoItems().size}")
+            add(" loaded neu items: ${NeuItems.allNeuRepoInternalNames().size}")
         }
 
         val isRelevant = SkyHanniRepoManager.isUsingBackup || unsuccessfulConstants.isNotEmpty() || !hasDefaultSettings
@@ -210,8 +207,8 @@ object DebugCommand {
 
     private fun networkInfo(event: DebugDataCollectEvent) {
         event.title("Network Information")
-        val tps = TpsCounter.tps ?: 0.0
-        val pingEnabled = SkyHanniMod.feature.dev.pingApi
+        val tps = TpsCounter.rawTps ?: 0.0
+        val pingEnabled = DevApi.mainToggles.pingApi
 
         val list = buildList {
             add("tps: $tps")
@@ -234,7 +231,7 @@ object DebugCommand {
                 add("previousPings: ${CurrentPing.previousPings.map { it.formatTime() }}")
             }
 
-            if (LimboTimeTracker.inLimbo) {
+            if (HypixelData.inLimbo) {
                 add("currently in limbo!")
             }
         }

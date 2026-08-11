@@ -4,23 +4,20 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.data.SackApi
 import at.hannibal2.skyhanni.events.GuiContainerEvent
-import at.hannibal2.skyhanni.events.InventoryCloseEvent
 import at.hannibal2.skyhanni.events.MessageSendToServerEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.minecraft.ToolTipTextEvent
 import at.hannibal2.skyhanni.events.minecraft.add
 import at.hannibal2.skyhanni.events.minecraft.addAll
-import at.hannibal2.skyhanni.features.commands.tabcomplete.GetFromSacksTabComplete
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
+import at.hannibal2.skyhanni.utils.Calculator
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ChatUtils.isCommand
-import at.hannibal2.skyhanni.utils.ChatUtils.senderIsSkyhanni
 import at.hannibal2.skyhanni.utils.HypixelCommands
-import at.hannibal2.skyhanni.utils.NeuCalculator
 import at.hannibal2.skyhanni.utils.NeuInternalName
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NumberUtil.isDouble
+import at.hannibal2.skyhanni.utils.OSUtils
 import at.hannibal2.skyhanni.utils.PrimitiveItemStack
 import at.hannibal2.skyhanni.utils.PrimitiveItemStack.Companion.makePrimitiveStack
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
@@ -100,7 +97,7 @@ object GetFromSackApi {
     }
 
     @HandleEvent
-    fun onInventoryClose(event: InventoryCloseEvent) {
+    fun onInventoryClose() {
         inventoryMap.clear()
     }
 
@@ -123,24 +120,7 @@ object GetFromSackApi {
         }
     }
 
-    @HandleEvent(onlyOnSkyblock = true)
-    fun onMessageToServer(event: MessageSendToServerEvent) {
-        if ((!config.queuedGFS && !config.bazaarGFS) || SkyBlockUtils.isOnAlphaServer) return
-        if (!event.isCommand(commandsWithSlash)) return
-        val replacedEvent = GetFromSacksTabComplete.handleUnderlineReplace(event)
-        queuedHandler(replacedEvent)
-        bazaarHandler(replacedEvent)
-        if (replacedEvent.isCancelled) {
-            event.cancel()
-            return
-        }
-        if (replacedEvent !== event) {
-            event.cancel()
-            ChatUtils.sendMessageToServer(replacedEvent.message)
-        }
-    }
-
-    private fun queuedHandler(event: MessageSendToServerEvent) {
+    internal fun queuedHandler(event: MessageSendToServerEvent) {
         if (!config.queuedGFS || SkyBlockUtils.isOnAlphaServer) return
         if (event.senderIsSkyhanni()) return
 
@@ -149,14 +129,17 @@ object GetFromSackApi {
         when (result) {
             CommandResult.VALID -> getFromSack(stack ?: return)
             CommandResult.WRONG_ARGUMENT -> ChatUtils.userError("Missing arguments! Usage: /getfromsacks <name/id> [amount]")
-            CommandResult.WRONG_IDENTIFIER -> ChatUtils.userError("Couldn't find an item with this name or identifier!")
+            CommandResult.WRONG_IDENTIFIER -> {
+                ChatUtils.debug("Couldn't find an item with this name or identifier! ${event.message}")
+                return
+            }
             CommandResult.WRONG_AMOUNT -> ChatUtils.userError("Invalid amount!")
             CommandResult.INTERNAL_ERROR -> {}
         }
         event.cancel()
     }
 
-    private fun bazaarHandler(event: MessageSendToServerEvent) {
+    internal fun bazaarHandler(event: MessageSendToServerEvent) {
         if (event.isCancelled) return
         if (!config.bazaarGFS || SkyBlockUtils.noTradeMode) return
         lastItemStack = commandValidator(event.splitMessage.drop(1)).second
@@ -164,22 +147,26 @@ object GetFromSackApi {
 
     private fun bazaarMessage(item: String, amount: Int, isRemaining: Boolean = false) = ChatUtils.clickableChat(
         "§lCLICK §r§eto get the ${if (isRemaining) "remaining " else ""}§ax$amount §9$item §efrom bazaar",
-        onClick = { HypixelCommands.bazaar(item.removeColor()) }, "§eClick to find on the bazaar!",
+        onClick = {
+            OSUtils.copyToClipboard(amount.toString())
+            HypixelCommands.bazaar(item.removeColor())
+        },
+        "§eClick to find on the bazaar!",
     )
 
     private fun commandValidator(args: List<String>): Pair<CommandResult, PrimitiveItemStack?> {
         if (args.isEmpty()) return CommandResult.WRONG_ARGUMENT to null
 
-        // The last parameter could be "2*3". This does not support ending with ")", but it is good enough
-        val argsNull = !args.last().last().isDigit()
+        val preCalc = Calculator.calculateOrNull(args.last())
+        val argsNull = preCalc == null
         val arguments = if (argsNull) {
             args + config.defaultAmountGFS.toString()
         } else args
 
         var amountString = arguments.last()
-        amountString = NeuCalculator.calculateOrNull(amountString)?.toString() ?: amountString
+        amountString = Calculator.calculateOrNull(amountString)?.toString() ?: amountString
 
-        if (!amountString.isDouble()) return CommandResult.WRONG_AMOUNT to null
+        if (!amountString.isDouble()) return CommandResult.WRONG_ARGUMENT to null
 
         val itemString = arguments.dropLast(1).joinToString(" ").uppercase().replace(':', '-')
         val replacedString = itemString.replace("_", " ")
@@ -202,7 +189,7 @@ object GetFromSackApi {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!config.bazaarGFS || SkyBlockUtils.noTradeMode) return
         val stack = lastItemStack ?: return
         val message = event.message

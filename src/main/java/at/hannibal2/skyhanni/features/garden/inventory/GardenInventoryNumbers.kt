@@ -2,19 +2,20 @@ package at.hannibal2.skyhanni.features.garden.inventory
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
-import at.hannibal2.skyhanni.data.GardenCropMilestones
-import at.hannibal2.skyhanni.data.GardenCropMilestones.getCounter
 import at.hannibal2.skyhanni.data.IslandType
-import at.hannibal2.skyhanni.data.model.ComposterUpgrade
+import at.hannibal2.skyhanni.data.garden.ComposterUpgradesData
+import at.hannibal2.skyhanni.data.garden.cropmilestones.CropMilestonesApi
+import at.hannibal2.skyhanni.data.garden.cropmilestones.CropMilestonesApi.getCurrentMilestoneTier
+import at.hannibal2.skyhanni.data.garden.cropmilestones.CropMilestonesApi.getMaxTier
 import at.hannibal2.skyhanni.events.RenderItemTipEvent
 import at.hannibal2.skyhanni.features.garden.GardenApi
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.InventoryUtils
+import at.hannibal2.skyhanni.utils.ItemUtils.cleanName
 import at.hannibal2.skyhanni.utils.ItemUtils.getLore
 import at.hannibal2.skyhanni.utils.NumberUtil.romanToDecimalIfNecessary
 import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
-import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 
 @SkyHanniModule
@@ -32,15 +33,14 @@ object GardenInventoryNumbers {
 
     @HandleEvent(onlyOnIsland = IslandType.GARDEN)
     fun onRenderItemTip(event: RenderItemTipEvent) {
-
         if (InventoryUtils.openInventoryName() == "Crop Milestones") {
             if (!config.cropMilestone) return
 
-            val crop = GardenCropMilestones.getCropTypeByLore(event.stack) ?: return
-            val counter = crop.getCounter()
+            val crop = CropMilestonesApi.getCropTypeByLore(event.stack) ?: return
             val allowOverflow = GardenApi.config.cropMilestones.overflow.inventoryStackSize
-            val currentTier = GardenCropMilestones.getTierForCropCount(counter, crop, allowOverflow)
-            event.stackTip = "" + currentTier
+            val currentTier = crop.getCurrentMilestoneTier() ?: return
+            val displayTier = if (!allowOverflow) minOf(getMaxTier(), currentTier) else currentTier
+            event.stackTip = "" + displayTier
         }
 
         if (InventoryUtils.openInventoryName() == "Crop Upgrades") {
@@ -54,7 +54,7 @@ object GardenInventoryNumbers {
         if (InventoryUtils.openInventoryName() == "Composter Upgrades") {
             if (!config.composterUpgrades) return
 
-            ComposterUpgrade.regex.matchMatcher(event.stack.hoverName.formattedTextCompatLeadingWhiteLessResets()) {
+            ComposterUpgradesData.composterUpgradePattern.matchMatcher(event.stack.cleanName) {
                 val level = group("level")?.romanToDecimalIfNecessary() ?: 0
                 event.stackTip = "$level"
             }

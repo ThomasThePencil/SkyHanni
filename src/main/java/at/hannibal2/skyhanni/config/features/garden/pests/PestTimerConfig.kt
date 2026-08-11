@@ -62,7 +62,10 @@ class PestTimerConfig {
     var cooldownOverWarning: Boolean = false
 
     @Expose
-    @ConfigOption(name = "Repeat Warning", desc = "Repeat the warning sound and title until wardrobe is opened or pest cooldown is over.")
+    @ConfigOption(
+        name = "Repeat Warning",
+        desc = "Repeats the warning sound and title until the wardrobe is opened or the pest cooldown expires."
+    )
     @ConfigEditorBoolean
     var repeatWarning: Boolean = false
 
@@ -80,9 +83,17 @@ class PestTimerConfig {
     val customCooldown: Property<Boolean> = Property.of(false)
 
     @Expose
-    @ConfigOption(name = "Custom Pest Cooldown Time", desc = "Set pest cooldown to this amount after a pest spawns.")
-    @ConfigEditorSlider(minValue = 75f, maxValue = 135f, minStep = 5f)
+    @ConfigOption(name = "Custom Cooldown Time", desc = "Set pest cooldown to this amount after a pest spawns.")
+    @ConfigEditorSlider(minValue = 75f, maxValue = 300f, minStep = 5f)
     val customCooldownTime: Property<Int> = Property.of(135)
+
+    @Expose
+    @ConfigOption(
+        name = "Custom Cooldown Time (Finnegan)",
+        desc = "Set pest cooldown to this amount after a pest spawns when Finnegan's \"Pest Eradicator\" perk is active.",
+    )
+    @ConfigEditorSlider(minValue = 75f, maxValue = 300f, minStep = 5f)
+    val customCooldownTimeFinnegan: Property<Int> = Property.of(75)
 
     @Expose
     @ConfigOption(

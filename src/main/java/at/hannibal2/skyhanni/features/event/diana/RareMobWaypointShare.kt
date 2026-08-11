@@ -2,6 +2,9 @@ package at.hannibal2.skyhanni.features.event.diana
 
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.config.commands.CommandCategory
+import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
+import at.hannibal2.skyhanni.config.features.event.diana.RareMobToggleConfig
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.events.SecondPassedEvent
@@ -15,22 +18,22 @@ import at.hannibal2.skyhanni.utils.EntityUtils
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.KeyboardManager
 import at.hannibal2.skyhanni.utils.LorenzVec
-import at.hannibal2.skyhanni.utils.MobUtils.mob
 import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.hasGroup
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatchers
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.RegexUtils.toLorenzVec
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SoundUtils
 import at.hannibal2.skyhanni.utils.SoundUtils.playSound
 import at.hannibal2.skyhanni.utils.StringUtils
 import at.hannibal2.skyhanni.utils.StringUtils.cleanPlayerName
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.removeIf
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.deceased
 import at.hannibal2.skyhanni.utils.getLorenzVec
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
-import net.minecraft.client.Minecraft
 import net.minecraft.client.player.RemotePlayer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Matcher
@@ -39,7 +42,7 @@ import kotlin.time.Duration.Companion.seconds
 @SkyHanniModule
 object RareMobWaypointShare {
 
-    private val config get() = SkyHanniMod.feature.event.diana.inquisitorSharing
+    private val config get() = SkyHanniMod.feature.event.diana.rareMobsSharing
 
     private val patternGroup = RepoPattern.group("diana.waypoints.inquisitor")
 
@@ -71,9 +74,8 @@ object RareMobWaypointShare {
      */
     private val rareMobFoundChatPattern by patternGroup.pattern(
         "dug",
-        ".* §r§eYou dug out a §.§.(?:Minos Inquisitor|Sphinx|King Minos|Manticore)§.§.!",
+        ".* §r§eYou dug out a §.§.(?:${RareDianaMob.entries.joinToString("|") { it.mobName }})§.§.!",
     )
-
 
     private var rareMob = -1
     private var lastRareMob = -1
@@ -90,8 +92,25 @@ object RareMobWaypointShare {
         val playerDisplayName: String,
         val location: LorenzVec,
         val spawnTime: SimpleTimeMark,
-        val mobName: String
+        val mobName: String,
     )
+
+    private fun RareMobToggleConfig.isEnabled(mob: RareDianaMob): Boolean = when (mob) {
+        RareDianaMob.SPHINX -> sphinx
+        RareDianaMob.MINOS_INQUISITOR -> minosInquisitor
+        RareDianaMob.MANTICORE -> manticore
+        RareDianaMob.KING_MINOS -> kingMinos
+    }
+
+    private fun isMobShareEnabled(name: String): Boolean {
+        val mob = RareDianaMob.fromName(name) ?: return true
+        return config.shareMobToggles.isEnabled(mob)
+    }
+
+    private fun isMobReceiveEnabled(name: String): Boolean {
+        val mob = RareDianaMob.fromName(name) ?: return true
+        return config.receiveMobToggles.isEnabled(mob)
+    }
 
     @HandleEvent
     fun onSecondPassed(event: SecondPassedEvent) {
@@ -137,7 +156,7 @@ object RareMobWaypointShare {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.HUB, receiveCancelled = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!isEnabled()) return
         val message = event.message
 
@@ -193,7 +212,7 @@ object RareMobWaypointShare {
     @HandleEvent
     fun onKeyPress(event: KeyPressEvent) {
         if (!isEnabled()) return
-        if (Minecraft.getInstance().screen != null) return
+        if (MinecraftCompat.screen != null) return
         if (event.keyCode == config.keyBindShare) sendRareMob()
     }
 
@@ -210,7 +229,6 @@ object RareMobWaypointShare {
     private fun sendRareMob() {
         if (!isEnabled()) return
         if (lastShareTime.passedSince() < 5.seconds) return
-        lastShareTime = SimpleTimeMark.now()
 
         if (rareMob == -1) {
             ChatUtils.debug("Trying to send Rare Diana Mob via chat, but no mob found nearby.")
@@ -227,13 +245,12 @@ object RareMobWaypointShare {
             ChatUtils.chat("§cRare Mob is dead")
             return
         }
-        val location = rareMob.getLorenzVec()
-        val x = location.x.toInt()
-        val y = location.y.toInt()
-        val z = location.z.toInt()
-        val mobName = rareMob.mob?.name.orEmpty()
-        val name = if (mobName.isEmpty()) "" else " | $mobName"
-        HypixelCommands.partyChat("x: $x, y: $y, z: $z $name")
+        val location = rareMob.getLorenzVec().toChatFormat()
+        val mobName = rareMob.name.string
+        if (!isMobShareEnabled(mobName)) return
+        lastShareTime = SimpleTimeMark.now()
+        val name = if (mobName.isEmpty()) "" else "| $mobName"
+        HypixelCommands.partyChat("$location $name")
     }
 
     private fun Matcher.block(): Boolean = !hasGroup("party") && !config.globalChat
@@ -241,10 +258,7 @@ object RareMobWaypointShare {
     private fun Matcher.detectFromChat(): Boolean {
         if (block()) return false
         val rawPlayerName = group("playerName")
-        val x = group("x").trim().toDoubleOrNull() ?: return false
-        val y = group("y").trim().toDoubleOrNull() ?: return false
-        val z = group("z").trim().toDoubleOrNull() ?: return false
-        val location = LorenzVec(x, y, z)
+        val location = toLorenzVec() ?: return false
 
         val rawMobName = if (hasGroup("mobName")) group("mobName").replace(" | ", "").trim().lowercase() else "Rare Mob"
         var mobName = "Rare Mob"
@@ -253,13 +267,14 @@ object RareMobWaypointShare {
             if (rawMobName !in mob.mobAliases) continue
             mobName = mob.cleanName
         }
+        if (!isMobReceiveEnabled(mobName)) return false
 
         val optionalAn = StringUtils.optionalAn(mobName)
 
         val name = rawPlayerName.cleanPlayerName()
         val playerDisplayName = rawPlayerName.cleanPlayerName(displayName = true)
         if (!waypoints.containsKey(name)) {
-            ChatUtils.chat("$playerDisplayName §l§efound $optionalAn $mobName at §l§c${x.toInt()} ${y.toInt()} ${z.toInt()}!")
+            ChatUtils.chat("$playerDisplayName §l§efound $optionalAn $mobName at §l§c${location.toLocalFormat()}!")
             if (name != PlayerUtils.getName()) {
                 TitleManager.sendTitle("§d$mobName §efrom §b$playerDisplayName")
                 playUserSound()
@@ -284,6 +299,19 @@ object RareMobWaypointShare {
     fun playUserSound() {
         with(config.sound) {
             SoundUtils.createSound(name, pitch).playSound()
+        }
+    }
+
+    @HandleEvent
+    fun onCommandRegistration(event: CommandRegistrationEvent) {
+        event.registerBrigadier("shresetdianamobs") {
+            description = "Resets all saved rare Diana mob locations"
+            category = CommandCategory.USERS_RESET
+            callback {
+                _waypoints.clear()
+                rareMobsNearby.clear()
+                ChatUtils.chat("Manually reset all rare mob data.")
+            }
         }
     }
 }

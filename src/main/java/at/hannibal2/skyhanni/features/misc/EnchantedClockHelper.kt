@@ -18,13 +18,13 @@ import at.hannibal2.skyhanni.utils.LorenzColor
 import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.SoundUtils
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import com.google.gson.annotations.Expose
-import net.minecraft.world.item.ItemStack
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -109,8 +109,10 @@ object EnchantedClockHelper {
             private var entries = listOf<BoostType>()
 
             fun byUsageStringOrNull(usageString: String) = entries.firstOrNull { it.usageString == usageString }
-            fun byItemStackOrNull(stack: ItemStack) = entries.firstOrNull { it.formattedName == stack.hoverName.formattedTextCompatLeadingWhiteLessResets() }
             fun bySimpleBoostType(simple: SimpleBoostType) = entries.firstOrNull { it.name == simple.name }
+            fun byItemStackOrNull(stack: SafeItemStack) = entries.firstOrNull {
+                it.formattedName == stack.hoverName.formattedTextCompatLeadingWhiteLessResets()
+            }
 
             fun populateFromJson(json: EnchantedClockJson) {
                 entries = json.boosts.map {
@@ -126,7 +128,7 @@ object EnchantedClockHelper {
                 }
             }
 
-            fun Map<Int, ItemStack>.filterStatusSlots() = filterKeys { key ->
+            fun Map<Int, SafeItemStack>.filterStatusSlots() = filterKeys { key ->
                 BoostType.entries.any { entry ->
                     entry.statusSlot == key
                 }
@@ -181,7 +183,7 @@ object EnchantedClockHelper {
     }
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         val usageString = boostUsedChatPattern.matchMatcher(event.message) { group("usagestring") } ?: return
         val boostType = BoostType.byUsageStringOrNull(usageString) ?: return
         val simpleType = boostType.toSimple() ?: return
@@ -189,13 +191,13 @@ object EnchantedClockHelper {
         storage[simpleType] = Status(State.CHARGING, boostType.getCooldownFromNow(), exactTime = true)
     }
 
-    private fun ItemStack.getTypePair(): Pair<BoostType?, SimpleBoostType?> {
+    private fun SafeItemStack.getTypePair(): Pair<BoostType?, SimpleBoostType?> {
         val boostType = BoostType.byItemStackOrNull(this) ?: return null to null
         val simpleType = boostType.toSimple() ?: return null to null
         return boostType to simpleType
     }
 
-    private fun ItemStack.getBoostState(): State? = statusLorePattern.firstMatcher(getLore()) {
+    private fun SafeItemStack.getBoostState(): State? = statusLorePattern.firstMatcher(getLore()) {
         group("status")?.let { statusStr ->
             runCatching { State.valueOf(statusStr) }.getOrElse {
                 ErrorManager.skyHanniError("Invalid status string: $statusStr")

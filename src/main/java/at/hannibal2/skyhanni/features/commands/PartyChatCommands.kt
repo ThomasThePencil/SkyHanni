@@ -14,8 +14,8 @@ import at.hannibal2.skyhanni.events.chat.TabCompletionEvent
 import at.hannibal2.skyhanni.features.misc.CurrentPing
 import at.hannibal2.skyhanni.features.misc.TpsCounter
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.test.DevApi
 import at.hannibal2.skyhanni.utils.ChatUtils
-import at.hannibal2.skyhanni.utils.ConfigUtils.jumpToEditor
 import at.hannibal2.skyhanni.utils.HypixelCommands
 import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
@@ -25,14 +25,13 @@ import kotlin.time.Duration.Companion.seconds
 object PartyChatCommands {
     private val config get() = SkyHanniMod.feature.misc.partyCommands
     private val storage get() = SkyHanniMod.feature.storage
-    private val devConfig get() = SkyHanniMod.feature.dev
 
     data class PartyChatCommand(
         val names: List<String>,
         val isEnabled: () -> Boolean,
         val requiresPartyLead: Boolean = true,
         val triggerableBySelf: Boolean = true,
-        val executable: (PartyChatEvent) -> Unit,
+        val executable: (PartyChatEvent.Allow) -> Unit,
     )
 
     private var lastWarp = SimpleTimeMark.farPast()
@@ -44,7 +43,7 @@ object PartyChatCommands {
             { config.transferCommand },
             triggerableBySelf = false,
             executable = {
-                HypixelCommands.partyTransfer(it.cleanedAuthor)
+                HypixelCommands.partyTransfer(it.authorName)
             },
         ),
         PartyChatCommand(
@@ -69,13 +68,9 @@ object PartyChatCommands {
             requiresPartyLead = false,
             executable = {
                 if (!CurrentPing.isEnabled()) {
-                    ChatUtils.clickableChat(
+                    ChatUtils.notifyOrDisable(
                         "Ping API is disabled, the ping command won't work!",
-                        prefixColor = "§c",
-                        onClick = {
-                            devConfig::pingApi.jumpToEditor()
-                        },
-                        hover = "§eClick to find setting in the config!",
+                        DevApi.mainToggles::pingApi,
                     )
                     return@PartyChatCommand
                 }
@@ -88,10 +83,10 @@ object PartyChatCommands {
             { config.tpsCommand },
             requiresPartyLead = false,
             executable = {
-                if (TpsCounter.tps != null) {
-                    HypixelCommands.partyChat("Current TPS: ${TpsCounter.tps}", prefix = true)
-                } else {
-                    ChatUtils.chat("TPS Command Sent too early to calculate TPS")
+                TpsCounter.tps?.let { tps ->
+                    HypixelCommands.partyChat("Current TPS: %.2f".format(tps), prefix = true)
+                } ?: run {
+                    ChatUtils.chat("Command sent too early to calculate TPS")
                 }
             },
         ),
@@ -123,11 +118,11 @@ object PartyChatCommands {
     }
 
     @HandleEvent
-    fun onPartyCommand(event: PartyChatEvent) {
-        if (event.message.firstOrNull() !in commandPrefixes) return
-        val commandLabel = event.message.substring(1).substringBefore(' ')
+    fun onPartyCommand(event: PartyChatEvent.Allow) {
+        if (event.cleanMessage.firstOrNull() !in commandPrefixes) return
+        val commandLabel = event.cleanMessage.substring(1).substringBefore(' ')
         val command = indexedPartyChatCommands[commandLabel.lowercase()] ?: return
-        val name = event.cleanedAuthor
+        val name = event.authorName
         if (name == PlayerUtils.getName() && (!command.triggerableBySelf || !config.selfTriggerCommands)) return
         if (!command.isEnabled()) return
         if (command.requiresPartyLead && PartyApi.partyLeader != PlayerUtils.getName()) return
@@ -218,19 +213,18 @@ object PartyChatCommands {
     }
 
     private fun blacklistModify(player: String) {
-        if (player !in storage.blacklistedUsers) {
-            ChatUtils.chat("§cNow ignoring §b$player§e!")
-            storage.blacklistedUsers.add(player)
+        if (isBlockedUser(player)) {
+            ChatUtils.chat("§aStopped ignoring §b$player§e!")
+            storage.blacklistedUsers.removeIf { it.equals(player, ignoreCase = true) }
             return
         }
-        ChatUtils.chat("§aStopped ignoring §b$player§e!")
-        storage.blacklistedUsers.remove(player)
-        return
+        ChatUtils.chat("§cNow ignoring §b$player§e!")
+        storage.blacklistedUsers.add(player)
     }
 
     private fun blacklistView() {
         val blacklist = storage.blacklistedUsers
-        if (blacklist.size <= 0) {
+        if (blacklist.isEmpty()) {
             ChatUtils.chat("Your ignored players list is empty!")
             return
         }

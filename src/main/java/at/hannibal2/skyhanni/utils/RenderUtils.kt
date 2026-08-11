@@ -12,13 +12,13 @@ import at.hannibal2.skyhanni.utils.compat.DrawContextUtils
 import at.hannibal2.skyhanni.utils.compat.GuiScreenUtils
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.RenderableUtils.renderXAligned
+import com.mojang.blaze3d.platform.Lighting
 import com.mojang.blaze3d.systems.RenderSystem
 import io.github.notenoughupdates.moulconfig.ChromaColour
 import net.minecraft.client.Minecraft
 import net.minecraft.world.inventory.Slot
 import java.awt.Color
-import kotlin.time.Duration
-import kotlin.time.DurationUnit
+import java.util.concurrent.CompletableFuture
 
 @Suppress("LargeClass", "TooManyFunctions")
 object RenderUtils {
@@ -44,23 +44,53 @@ object RenderUtils {
     }
 
     /**
+     * Runs a block on an asserted Render Thread.
+     * @param block the block to run
+     */
+    private fun <T> runOnRenderThread(
+        setupFor: Lighting.Entry? = null,
+        block: () -> T,
+    ): T {
+        RenderSystem.assertOnRenderThread()
+        setupFor?.let { Minecraft.getInstance().gameRenderer.lighting.setupFor(it) }
+        return block()
+    }
+
+    /**
+     * Returns a [Thread] that schedules a block on the Render Thread when started.
+     * Useful for [Runtime.addShutdownHook].
+     */
+    fun threadOnRenderThread(
+        setupFor: Lighting.Entry? = null,
+        block: () -> Any,
+    ) = Thread { scheduleOnRenderThread(setupFor, block) }
+
+    /**
+     * Runs or schedules a block on the Render Thread.
+     * - If already on the render thread, executes immediately and returns a completed future.
+     * - Otherwise, queues and returns a pending future.
+     */
+    fun <T> scheduleOnRenderThread(
+        setupFor: Lighting.Entry? = null,
+        block: () -> T,
+    ): CompletableFuture<T> =
+        if (RenderSystem.isOnRenderThread()) {
+            CompletableFuture.completedFuture(runOnRenderThread(setupFor, block))
+        } else {
+            CompletableFuture.supplyAsync(
+                { runOnRenderThread(setupFor, block) },
+                Minecraft.getInstance(),
+            )
+        }
+
+    /**
      * Used for some debugging purposes.
      */
     val absoluteTranslation
         get() = run {
-            //#if MC < 1.21.6
-            RenderSystem.assertOnRenderThread()
-            val posMatrix = DrawContextUtils.drawContext.pose().last().pose()
-            val tmp = org.joml.Vector3f()
-            posMatrix.getTranslation(tmp)
-            val xTranslate = tmp.x.toInt()
-            val yTranslate = tmp.y.toInt()
-            val zTranslate = tmp.z.toInt()
-            //#else
-            //$$ val xTranslate = 0
-            //$$ val yTranslate = 0
-            //$$ val zTranslate = 0
-            //#endif
+            val xTranslate = 0
+            val yTranslate = 0
+            val zTranslate = 0
             Triple(xTranslate, yTranslate, zTranslate)
         }
 
@@ -86,12 +116,8 @@ object RenderUtils {
         highlight(color, x, y)
     }
 
-    private fun highlight(color: Color, x: Int, y: Int) {
-        DrawContextUtils.pushMatrix()
-        val zLevel = 50f
-        DrawContextUtils.translate(0f, 0f, 110 + zLevel)
+    private fun highlight(color: Color, x: Int, y: Int) = DrawContextUtils.pushPop {
         GuiRenderUtils.drawRect(x, y, x + 16, y + 16, color.rgb)
-        DrawContextUtils.popMatrix()
     }
 
     fun Slot.drawBorder(color: LorenzColor) {
@@ -110,15 +136,11 @@ object RenderUtils {
         drawBorder(color, x, y)
     }
 
-    fun drawBorder(color: Color, x: Int, y: Int) {
-        DrawContextUtils.pushMatrix()
-        val zLevel = 50f
-        DrawContextUtils.translate(0f, 0f, 110 + zLevel)
+    fun drawBorder(color: Color, x: Int, y: Int) = DrawContextUtils.pushPop {
         GuiRenderUtils.drawRect(x, y, x + 1, y + 16, color.rgb)
         GuiRenderUtils.drawRect(x, y, x + 16, y + 1, color.rgb)
         GuiRenderUtils.drawRect(x, y + 15, x + 16, y + 16, color.rgb)
         GuiRenderUtils.drawRect(x + 15, y, x + 16, y + 16, color.rgb)
-        DrawContextUtils.popMatrix()
     }
 
     fun interpolate(currentValue: Double, lastValue: Double, multiplier: Double): Double {
@@ -126,41 +148,29 @@ object RenderUtils {
     }
 
     fun Position.transform(): Pair<Int, Int> {
-        DrawContextUtils.translate(getAbsX().toFloat(), getAbsY().toFloat(), 0F)
-        DrawContextUtils.scale(effectiveScale, effectiveScale, 1F)
+        DrawContextUtils.translate(getAbsX().toFloat(), getAbsY().toFloat())
+        DrawContextUtils.scale(effectiveScale, effectiveScale)
         val x = ((GuiScreenUtils.mouseX - getAbsX()) / effectiveScale).toInt()
         val y = ((GuiScreenUtils.mouseY - getAbsY()) / effectiveScale).toInt()
         return x to y
     }
 
     @Deprecated("Use renderRenderable instead", ReplaceWith("renderRenderable(renderable, posLabel)"))
-    fun Position.renderString(string: String?, offsetX: Int = 0, offsetY: Int = 0, posLabel: String) {
-        if (string.isNullOrBlank()) return
-        val x = renderString0(string, offsetX, offsetY, centerX)
-        GuiEditManager.add(this, posLabel, x, 10)
-    }
+    private fun Position.renderString0(string: String, offsetX: Int = 0, offsetY: Int = 0, centered: Boolean): Int =
+        DrawContextUtils.pushPopResult {
+            val display = "§f$string"
+            transform()
+            val fr = Minecraft.getInstance().font
 
-    @Deprecated("Use renderRenderable instead", ReplaceWith("renderRenderable(renderable, posLabel)"))
-    private fun Position.renderString0(string: String, offsetX: Int = 0, offsetY: Int = 0, centered: Boolean): Int {
-        val display = "§f$string"
-        DrawContextUtils.pushMatrix()
-        transform()
-        val fr = Minecraft.getInstance().font
+            DrawContextUtils.translate(offsetX + 1.0, offsetY + 1.0)
 
-        DrawContextUtils.translate(offsetX + 1.0, offsetY + 1.0, 0.0)
+            val finalX = if (centered) {
+                offsetX - (fr.width(string) / 2f)
+            } else 0f
+            GuiRenderUtils.drawString(display, finalX, 0f, -1)
 
-        if (centered) {
-            val strLen: Int = fr.width(string)
-            val x2 = offsetX - strLen / 2f
-            GuiRenderUtils.drawString(display, x2, 0f, -1)
-        } else {
-            GuiRenderUtils.drawString(display, 0f, 0f, -1)
+            return fr.width(display)
         }
-
-        DrawContextUtils.popMatrix()
-
-        return fr.width(display)
-    }
 
     @Deprecated("Use renderRenderables instead", ReplaceWith("renderRenderables(renderables)"))
     fun Position.renderStrings(list: List<String>, extraSpace: Int = 0, posLabel: String) {
@@ -187,53 +197,36 @@ object RenderUtils {
         if (renderables.isEmpty()) return
         var longestY = 0
         val longestX = renderables.maxOf { it.width }
-        for (line in renderables) {
-            DrawContextUtils.pushMatrix()
-            val (x, y) = transform()
-            DrawContextUtils.translate(0f, longestY.toFloat(), 0F)
-            Renderable.withMousePosition(x, y) {
-                line.renderXAligned(0, longestY, longestX)
+        renderables.forEach { line ->
+            DrawContextUtils.pushPop {
+                val (x, y) = transform()
+                DrawContextUtils.translate(0f, longestY.toFloat())
+                Renderable.withMousePosition(x, y) {
+                    line.renderXAligned(0, longestY, longestX)
+                }
+
+                longestY += line.height + extraSpace + 2
             }
-
-            longestY += line.height + extraSpace + 2
-
-            DrawContextUtils.popMatrix()
         }
         if (addToGuiManager) GuiEditManager.add(this, posLabel, longestX, longestY)
     }
 
+    // TODO clean up nullable calls - the function param should not take `Renderable?`,
+    //  the onus should be on the caller to check before calling this.
     fun Position.renderRenderable(
-        renderable: Renderable?,
+        renderable: Renderable,
         posLabel: String,
         addToGuiManager: Boolean = true,
     ) {
         // cause crashes and errors on purpose
         DrawContextUtils.drawContext
-        if (renderable == null) return
-        DrawContextUtils.pushMatrix()
-        val (x, y) = transform()
-        Renderable.withMousePosition(x, y) {
-            renderable.render(0, 0)
+        DrawContextUtils.pushPop {
+            val (x, y) = transform()
+            Renderable.withMousePosition(x, y) {
+                renderable.render(0, 0)
+            }
         }
-        DrawContextUtils.popMatrix()
         if (addToGuiManager) GuiEditManager.add(this, posLabel, renderable.width, renderable.height)
-    }
-
-    @Deprecated("Use ChromaColor instead")
-    fun chromaColor(
-        timeTillRepeat: Duration,
-        offset: Float = 0f,
-        saturation: Float = 1F,
-        brightness: Float = 0.8F,
-        timeOverride: Long = System.currentTimeMillis(),
-    ): Color {
-        return Color(
-            Color.HSBtoRGB(
-                ((offset + timeOverride / timeTillRepeat.toDouble(DurationUnit.MILLISECONDS)) % 1).toFloat(),
-                saturation,
-                brightness,
-            ),
-        )
     }
 
     // todo move to GuiRenderUtils?
@@ -265,13 +258,13 @@ object RenderUtils {
         val fontRenderer = Minecraft.getInstance().font
 
         DrawContextUtils.pushPop {
-            DrawContextUtils.translate((xPos - fontRenderer.width(text)).toFloat(), yPos.toFloat(), 200f)
-            DrawContextUtils.scale(scale, scale, 1f)
+            DrawContextUtils.translate((xPos - fontRenderer.width(text)).toFloat(), yPos.toFloat())
+            DrawContextUtils.scale(scale, scale)
             GuiRenderUtils.drawString(text, 0f, 0f, -1)
 
             val reverseScale = 1 / scale
 
-            DrawContextUtils.scale(reverseScale, reverseScale, 1f)
+            DrawContextUtils.scale(reverseScale, reverseScale)
         }
     }
 }

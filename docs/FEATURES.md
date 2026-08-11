@@ -50,6 +50,11 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Notify you in chat when a marked player joins/leaves your lobby. - HiZe (https://github.com/hannibal002/SkyHanni/pull/2653)
 + Added /shtodos. - CalMWolfs & nopo (https://github.com/hannibal002/SkyHanni/pull/4968)
   + Works exactly the same as NEU's version, you can even import your NEU todos into skyhanni.
++ Added `/shcalc` command. - Luna (https://github.com/hannibal002/SkyHanni/pull/4821)
++ Added Rainbow Action Bar. - nopo (https://github.com/hannibal002/SkyHanni/pull/5104)
++ Added an option to show the item that was bid on in the winning bid message in the Dark Auction. - Luna (https://github.com/hannibal002/SkyHanni/pull/5126)
++ Added SkyHanni Achievements. - nopo (https://github.com/hannibal002/SkyHanni/pull/5472)
+  + Do /shachievements to see them all.
 
 #### Chat Filter
 
@@ -70,6 +75,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Plays bark sound when 'woof' appears in chat.
 + Added option to shorten coin amounts in chat messages. - Daveed (https://github.com/hannibal002/SkyHanni/pull/3231)
 + Added filters for reward bundles reminders, redundant shard hunting messages, and unmineable trees. - Erymanthus (https://github.com/hannibal002/SkyHanni/pull/4327)
++ Added a chat message when you encounter a SkyHanni contributor for the first time. - Avrg (https://github.com/hannibal002/SkyHanni/pull/5787)
 
 </details>
 <details open><summary>
@@ -115,7 +121,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Highlight chests which have been rerolled inside Croesus
     + Shows kismet amount at the re-roll button
 + SA Jump Notification. - CarsCupcake (https://github.com/hannibal002/SkyHanni/pull/852)
-    + Warn shorty before a Shadow Assassin jumps to you in dungeons.
+    + Warn shortly before a Shadow Assassin jumps to you in dungeons.
 + Notifications for architect on puzzle fail. - Conutik (https://github.com/hannibal002/SkyHanni/pull/1197)
     + Shows Title.
     + Shows button in chat to retrieve from sack.
@@ -151,6 +157,8 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Floor 7 Spring Boots Helper. - Cuz_Im_Clicks (https://github.com/hannibal002/SkyHanni/pull/2581)
 + Added a guess for the Secret Tracker 3000 while in dungeons. - bloxigus (https://github.com/hannibal002/SkyHanni/pull/4611)
 + Added Croesus Unopened Chest Count Overlay for Kuudra and Dungeons. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/4846)
++ Croesus Profit Overlay and Highlight most profitable chest. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/4857)
++ Added Blood Move Message for Dungeon Blood Camp. - Jordyrat (https://github.com/hannibal002/SkyHanni/pull/5276)
 
 </details>
 <details open><summary>
@@ -164,7 +172,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
       around items that meet that requirement.
     + Works in:
         + In NPC sell inventories, ender chests and backpacks, salvaging in the dungeon hub, player trade
-        + bazaar, action house, accessory bag, sack of sacks, fishing bag, potion bag,
+        + bazaar, auction house, accessory bag, sack of sacks, fishing bag, potion bag,
         + chests on the private island, attribute fusion, equipment GUI, Rift Motes Grubber
     + Option to allow/block clicks
 + Option to change the gray-out opacity for 'Not Clickable Items'.
@@ -282,7 +290,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Outside Sack Value Display. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/3778)
     + Show value of all items in Sacks as GUI while not in Sacks.
 + Added Trade Value Overlay. - AxeOfTheShredded (https://github.com/hannibal002/SkyHanni/pull/3348)
-    + Doesn't suppport coins.
+    + Doesn't support coins.
 + Added Evolving Item time remaining in lore (Bottle of Jyrre, Dark Cacao Truffle, etc.). - Obsidian (https://github.com/hannibal002/SkyHanni/pull/3614)
 + Added option to highlight Current Pet in menu. - Daveed (https://github.com/hannibal002/SkyHanni/pull/4068)
 + Added Fann Leveling Cost. - minhperry + Daveed (https://github.com/hannibal002/SkyHanni/pull/4061)
@@ -306,6 +314,13 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Coins in excess of the integer limit on an individual order do not count towards the daily limit.
     + Resets at midnight UTC.
 + Added a keybind to fill your inventory with the hovered item from Sacks. - nopo (https://github.com/hannibal002/SkyHanni/pull/4697)
++ Added Supercrafting menu quantity preset overlay. - HyperKids (https://github.com/hannibal002/SkyHanni/pull/5296)
++ Added Museum Category Highlighter. - nopo (https://github.com/hannibal002/SkyHanni/pull/5450)
+  + Highlights completed categories in green.
++ Added Gift Clean Display: Show only 'CLICK TO OPEN' on gifts, hiding the From/To name. - LegentPc (https://github.com/hannibal002/SkyHanni/pull/5619)
++ Added Loadout Keybinds. - FabiHBBBT (https://github.com/hannibal002/SkyHanni/pull/6013)
++ Added Option To Move `Insert Item Into Sack` button back to original placement. - Avrg (https://github.com/hannibal002/SkyHanni/pull/5874)
++ Block Overriding Rare Reforges in Blacksmith and Hex. - Avrg (https://github.com/hannibal002/SkyHanni/pull/5856)
 
 </details>
 <details open><summary>
@@ -323,6 +338,10 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Wand of Strength cooldown is now displayed. - saga (https://github.com/hannibal002/SkyHanni/pull/1948)
     + The cooldown displayed is for the buff, not the item usage.
 + Added Tactical Insertion Ability Cooldown feature. - DungeonHub (https://github.com/hannibal002/SkyHanni/pull/2278)
++ Added Fire Freeze Features. - Empa & Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5224)
+    + Timer/Box on Mobs for Freeze Timer.
+    + Timer until Freeze Activation.
+    + Particle Replacer with Circular Line.
 
 </details>
 <details open><summary>
@@ -361,7 +380,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 
 </summary>
 
-- A display that show the last time the hopper inside a minion has been emptied.
+- A display that shows the last time the hopper inside a minion has been emptied.
 - A marker to the last opened minion for a couple of seconds (seen through walls)
 - Option to hide mob nametags close to minions.
 - Minion hopper coins per day display (Using the held coins in the hopper and the last time the hopper was collected to
@@ -373,8 +392,8 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Added a button in the Minion menu to obtain required items for the next upgrade from Sacks or Bazaar.
     + Opens Bazaar if items aren't found in Sacks.
     + Shows the cost of required items and total upgrade cost.
-
 + Shows how much skill experience you will get when picking up items from the minion storage. - Thunderblade73
++ Added Inferno Minion Profit Tracker. - FabiHBBBT (https://github.com/hannibal002/SkyHanni/pull/5500)
 
 </details>
 <details open><summary>
@@ -467,6 +486,18 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added option to display total Trophy Fish count in Odger's inventory. - ksndq (https://github.com/hannibal002/SkyHanni/pull/3526)
 + Added Rare Sea Creature Party Announcer. - Jordyrat (https://github.com/hannibal002/SkyHanni/pull/3672)
     + Sends a message to party chat when a rare sea creature is caught.
++ Mute Banshee screams. - Maratons4 (https://github.com/hannibal002/SkyHanni/pull/5007)
++ Flay/Soul Whip Close Particle Hider. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5094)
++ Added Sea Creature Health Overlay. - Empa + Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5096)
++ Added Sea Creature Health Overlay. - Empa + Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5096)
++ Added Sea Creature Kill Time. - Empa + Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5096)
++ Added Sea Creature Lootshare Sphere. - Empa + Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5096)
++ Added Party Chat and Title Warning when an owned Sea Creature gets Cocooned. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5110)
++ Added a Fishing Bobber Timer that shows how long the bobber has been deployed. - hijiol (https://github.com/hannibal002/SkyHanni/pull/5569)
+  + Configurable to start on liquid touch or on cast.
++ Added automatic Wormhole locator. - FabiHBBBT (https://github.com/hannibal002/SkyHanni/pull/5699)
++ Added Fishing Bait Display. - bendonaldson (https://github.com/hannibal002/SkyHanni/pull/5725)
+    + Shows the currently selected fishing bait and remaining amount while holding a fishing rod.
 
 </details>
 <details open><summary>
@@ -575,6 +606,12 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Reduces transparency of other mobs while fighting a Slayer boss.
 + Added option to hide Damage Splashes near Slayer Bosses. - fazfoxy (https://github.com/hannibal002/SkyHanni/pull/4721)
 + Added option to hide Slayer Spawn particles. - fazfoxy (https://github.com/hannibal002/SkyHanni/pull/4721)
++ Cocoon Timer & Mob Name Overlay. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/5113)
++ Added line to Tarantula Boss. - SillyGirlMarina (https://github.com/hannibal002/SkyHanni/pull/5392)
++ Added Egg Sac highlight during the Tarantula Broodfather boss fight. - legentpc (https://github.com/hannibal002/SkyHanni/pull/5919)
++ Added line to Voidgloom Seraph boss. - Marina (https://github.com/hannibal002/SkyHanni/pull/5669)
++ Added No Gummy Warning. - PuppyGirlAbora (https://github.com/hannibal002/SkyHanni/pull/5871)
+    + Added a warning when killing mobs without a Re-Heated Gummy Polar Bear active.
 
 </details>
 <details open><summary>
@@ -607,6 +644,9 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Shows a large display with a timer when the Fire Pillar is about to explode.
     + Also displays for other players' bosses.
 + Added blocking for slayers that cannot spawn in the current dimension to prevent Maddox's menu from closing. - Luna (https://github.com/hannibal002/SkyHanni/pull/3211)
++ Added Remaining Slayer Kills Display. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/4818)
+    + Shows the names and remaining number of mob kills needed until the boss spawns.
+    + Option to show mob level and health.
 
 </details>
 <details open><summary>
@@ -788,8 +828,8 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Default: #10k
 + Sync Jacob Contests - Kaeso + CalMWolfs
     + No need to open the calendar every SkyBlock year again.
-    + Grab Jacob Contest data from the elitebot.dev website.
-    + Option to send local contest data to elitebot.dev at the start of the new SkyBlock year.
+    + Grab Jacob Contest data from the eliteskyblock.com website.
+    + Option to send local contest data to eliteskyblock.com at the start of the new SkyBlock year.
 + **Visual garden plot borders** - VixidDev
     + Press F3 + G to enable/disable the view.
 + /shmouselock command to lock mouse rotation for farming. - Cad
@@ -816,6 +856,35 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added DNA Analyser Solver. - CalMWolfs & nopo (https://github.com/hannibal002/SkyHanni/pull/4926)
 + Added Hoe Level Display. - nopo (https://github.com/hannibal002/SkyHanni/pull/4926)
 + Mute Hoe Level Up Sound. - nopo (https://github.com/hannibal002/SkyHanni/pull/4966)
++ Added Zorro's Cape Contest Protection. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/5029)
+  + Requires equipping Zorro's Cape to claim Jacob's Farming Contest rewards.
++ Added crop fever tracker. - Chissl (https://github.com/hannibal002/SkyHanni/pull/5059)
++ Added display for the Mantid reforge pest kill bonus. - Chissl (https://github.com/hannibal002/SkyHanni/pull/5082)
++ Greenhouse Growth Cycle Display. - FabiHBBBT (https://github.com/hannibal002/SkyHanni/pull/5078)
++ Added crop collection leaderboard display. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4665)
+  + For each crop, show your all-time and monthly collection, leaderboard position, and players ahead/behind you.
+  + Swap between crops and leaderboard modes by clicking on the display switcher button while in an inventory.
+  + Data sourced from the eliteskyblock.com API.
++ Added pest kills leaderboard display. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4665)
+  + For each pest, show your all-time kills, leaderboard position, and players ahead/behind you.
+  + Swap between pests by clicking on the display switcher button while in an inventory.
+  + Data sourced from the eliteskyblock.com API.
++ Highlight Harvestability status in the Greenhouse. - nopo (https://github.com/hannibal002/SkyHanni/pull/5136)
++ Highlight Water Status green if the crop doesn't need more water. - nopo (https://github.com/hannibal002/SkyHanni/pull/5168)
++ Added command `/shgardenuptime`. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4703)
+    + Shows garden uptime history for the past x days, defaults to 7 days.
++ Added Crop Break Tracker. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4703)
+    + Shows the number of crops you have broken on the Garden and blocks per second (supports pest farming/visitors).
+    + Can choose to display data from the following modes: Total, Session, Day, Week, Month, or Year.
++ Added an option to prevent breaking crops on the Garden while holding a fishing rod. - Luna (https://github.com/hannibal002/SkyHanni/pull/5455)
++ Added option to reduce sensitivity while holding Squeaky Mousemat. - Nick-NCSU (https://github.com/hannibal002/SkyHanni/pull/5391)
++ Hide annoying messages about Kernels getting added to your purse while farming. - Shana (https://github.com/hannibal002/SkyHanni/pull/5679)
++ Added current Harvest Feast in-season crop display. - Marie (https://github.com/hannibal002/SkyHanni/pull/5653)
+    + Displays the currently in-season Harvest Feast crops and how long they will be in season for.
++ Added Phantomleaf Solver. - mzhaodev (https://github.com/hannibal002/SkyHanni/pull/6101)
+    + When harvesting Phantomleaf in the Garden, highlight the hiding spot in green.
+    + Stand still for best results.
++ Added Charmed Visitor Display. - FabiHBBBT (https://github.com/hannibal002/SkyHanni/pull/5832)
 
 ### Garden Pests
 
@@ -863,14 +932,14 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Option to change the number of seconds until the waypoint will disappear.
 + Pest Profit Tracker. - Empa (https://github.com/hannibal002/SkyHanni/pull/1321)
 + Open On Elite. - Obsidian (https://github.com/hannibal002/SkyHanni/pull/1185)
-    + Allow opening farming contest stats on elitebot.dev by pressing a keybind + mouse click onto a contest item.
+    + Allow opening farming contest stats on eliteskyblock.com by pressing a keybind + mouse click onto a contest item.
     + Works inside the menus Jacob's Farming Contest, Your Contests, and SkyBlock Calendar.
 + Visitor's Logbook Stats. - HiZe (https://github.com/hannibal002/SkyHanni/pull/1287)
     + Show all your visited/accepted/denied visitors stats in a display.
 + Stereo Harmony Display. - Empa (https://github.com/hannibal002/SkyHanni/pull/1324)
     + Options to show/hide boosted crop and pest icons.
 + Added Super Craft button to visitors for ease of access. - Conutik (https://github.com/hannibal002/SkyHanni/pull/1173)
-    + Checks if you have enough materials to craft the items and depending on that shows the button or not.
+    + Checks if you have enough materials to craft the items and shows or hides the button accordingly
 + Overflow Garden crop milestones. - Luna & HiZe (https://github.com/hannibal002/SkyHanni/pull/997)
 + New "Craftable!" message when Visitor Items Needed are craftable. - Paloys (https://github.com/hannibal002/SkyHanni/pull/1891)
 + Added toggle for compacting Garden visitor summary messages. - Daveed (https://github.com/hannibal002/SkyHanni/pull/2026)
@@ -892,6 +961,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added keybind to release all pests in a Pest Trap. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4675)
 + Added option to change the pest spawn sound. - Chissl (https://github.com/hannibal002/SkyHanni/pull/4580)
   + Modes are Default, Muted, Custom, and Plumber.
++ Added option to show crops instead of tools in Farming Toolkit menu. - Growling_Grizzly (https://github.com/hannibal002/SkyHanni/pull/5657)
 
 </details>
 <details open><summary>
@@ -1001,6 +1071,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Bacte Kill Zone Warning. - Luna (https://github.com/hannibal002/SkyHanni/pull/4541)
     + Sound and title alert if you are outside the arena during the Bacte fight and about to die.
 + Added Ubik Cube Timer GUI. - nopo (https://github.com/hannibal002/SkyHanni/pull/4909)
++ Added solo mode for rift snake features. - Icetrix (https://github.com/hannibal002/SkyHanni/pull/5946)
 
 </details>
 <details open><summary>
@@ -1042,7 +1113,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Also include breakdown information on hover.
 + Textured cold overlay to Glacite Tunnels. - j10a1n15, Empa (https://github.com/hannibal002/SkyHanni/pull/1438)
     + Change at what cold level the texture should appear.
-+ Glacial Powder as stack size in the Fossil Excavator. - jani270 (https://github.com/hannibal002/SkyHanni/pull/1458)
++ Glacial Powder as stack size in the Fossil Excavator. - jani (https://github.com/hannibal002/SkyHanni/pull/1458)
 + Highlight own Golden/Diamond Goblin. - Thunderblade73 (https://github.com/hannibal002/SkyHanni/pull/1466)
 + Click to get an Ascension Rope from sacks in the Mineshaft. - j10a1n15 (https://github.com/hannibal002/SkyHanni/pull/1542)
 + Tunnel Maps. - Thunderblade73 (https://github.com/hannibal002/SkyHanni/pull/1546)
@@ -1086,6 +1157,17 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Ability to send entered Mineshaft to party chat.
     + Tracks how many shafts you entered since each Mineshaft Type.
 + Added Coleweight's Ordered Waypoints (/shordered or /sho). - SuperClash (https://github.com/hannibal002/SkyHanni/pull/3622)
++ Added UI to get Suspicious Scrap from sacks while in Fossil Excavator. - Daveed (https://github.com/hannibal002/SkyHanni/pull/4579)
++ Show actual Gemstone Powder gained in chat alongside the base amount. - tristendillon (https://github.com/hannibal002/SkyHanni/pull/4907)
+  + Displays format: `Gemstone Powder x1,944 (x3,888)` where the first number is base, and the second is the actual amount after multipliers.
+  + Hover over the message to see a detailed breakdown of all active multipliers.
++ Added Mineshaft Cave-in Timer. - Rain (https://github.com/hannibal002/SkyHanni/pull/5620)
+    + Shows cave-in countdown, elapsed time, and estimated time until cold reaches 100.
++ Added option to mute treasure chest sounds. - ItsRealHim (https://github.com/hannibal002/SkyHanni/pull/5896)
++ Added a clickable chat reminder to teleport to Don Expresso when he is full. - Ambrosy (https://github.com/hannibal002/SkyHanni/pull/5580)
++ Added Mute when all Mineshaft Corpses are found. - Piggered (https://github.com/hannibal002/SkyHanni/pull/5929)
+    + Mutes the sounds made from the Organ Donor accessory once all Frozen Corpses in the Mineshaft have been found.
+    + Requires Corpse Locator to be enabled.
 
 </details>
 <details open><summary>
@@ -1127,6 +1209,18 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added compact messages for Agatha/Starlyn Sister contests. - Erymanthus (https://github.com/hannibal002/SkyHanni/pull/4258)
 + Added option to mute final Tree Breaking Sound. - Siv (https://github.com/hannibal002/SkyHanni/pull/4459)
 + Added some whisper cost and spent info to HOTF perk tooltips. - CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/4754)
++ Added Mute Fusion Machine. - Luna (https://github.com/hannibal002/SkyHanni/pull/5196)
++ Added tracker, titles, and block highlighting for Dark Monoliths. - Daveed (https://github.com/hannibal002/SkyHanni/pull/4062)
++ Added Honeyhive Reminder. - CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/6280)
+    + Reminds you that you can collect the Honey Hives in Torrhus Canyon and navigates you to all of them.
+
+### Safari
+
++ Added Hideyho Finder. - CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/6284)
+    + Helps you find Hideyho by navigating to all of its possible hiding locations.
++ Added Safari Names in Center. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/6261)
+    + Shows the names of the 4 areas while in the center of the Critter Safari.
+    + This works identically to the Names in Core feature in Crystal Hollows.
 
 </details>
 <details open><summary>
@@ -1184,6 +1278,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Shiny orb helper. - Daveed & CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/4355)
     + Shows lines between you, your pig and it's orb.
 + Added Shiny orb tracker. - Daveed (https://github.com/hannibal002/SkyHanni/pull/4355)
++ Added a fix for a Hypixel bug where Diana spades will sometimes play low-pitched Minecraft music. - Luna (https://github.com/hannibal002/SkyHanni/pull/5527)
 
 ### Hoppity and Chocolate Factory
 
@@ -1266,7 +1361,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added an option to show the Hoppity Event Card only while on islands where eggs spawn. - Daveed (https://github.com/hannibal002/SkyHanni/pull/2940)
 + Added the ability to recolor chocolate gains from duplicate rabbits when the Time Tower is active. - Daveed (https://github.com/hannibal002/SkyHanni/pull/2805)
 + Added Hitman statistics to Chocolate Factory stats. - Daveed (https://github.com/hannibal002/SkyHanni/pull/2991)
-    + Allows to view remaining time for full and 28 claimable slots.
+    + Allows viewing remaining time for full and 28 claimable slots.
 + Added party mode for Chocolate Factory. - Daveed (https://github.com/hannibal002/SkyHanni/pull/3054)
     + Using it is not recommended.
 + Added chat compact for Hitman Claim All. - Daveed (https://github.com/hannibal002/SkyHanni/pull/3077)
@@ -1289,6 +1384,9 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Zombie Shootout QoL improvements for the Carnival. - ILike2WatchMemes (https://github.com/hannibal002/SkyHanni/pull/2497)
     + Colored hitboxes.
     + Lamp timer + line.
++ Added Carnival Fruit Game Solver. - YoGoUrT_20 (https://github.com/hannibal002/SkyHanni/pull/5938)
+    + Highlights the best square to dig next, estimating bomb/rum risk and expected fruit points from the dowsing clues, and recommends which shovel to use.
+    + Optionally displays remaining fruit, guessed fruit per square, adjacent treasure/mines, and already found fruit.
 
 ### The Great Spook
 
@@ -1309,6 +1407,10 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Line to Jerry. - Thunderblade73 (https://github.com/hannibal002/SkyHanni/pull/3388)
     + Shows a line to your spawned Jerry from Jerrypocalypse.
 
+#### Year of the Witch
+
++ Added Year of the Witch Stew Helper. - nopo (https://github.com/hannibal002/SkyHanni/pull/5315)
+
 </details>
 <details open><summary>
 
@@ -1318,9 +1420,8 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 
 + **/shcommands**
     + Show all commands in SkyHanni
-+ **/wiki <search term>** - using hypixel-skyblock.fandom.com instead of Hypixel wiki.
++ **/wiki <search term>** - using independent wiki instead of official wiki.
 + **/shmarkplayer <player>** - marking a player with yellow color.
-+ **/shtrackcollection <item>** - This tracks the number of items you collect, but it does not work with sacks.
 + **/shcropspeedmeter** - Helps calculate the real farming fortune with the formula crops broken per block.
 + **/shcroptime <amount> <item>** Displays the estimated time it will take to gather the requested quantity of a
   particular item based on the current crop speed.
@@ -1329,7 +1430,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + `/pt <player>` as alias for `/party transfer <player>`
     + SkyBlock Command `/tp` to check the play time still works
 + **/shfarmingprofile [player name]**
-    + Opens the elitebot.dev website in your web browser to show your Farming Weight profile.
+    + Opens the eliteskyblock.com website in your web browser to show your Farming Weight profile.
 + Tab Complete support to sacks command /gfs and /getfromsacks. - J10a1n15
 + /shcalccrop. - CalMWolfs
     + Calculate how many crops need to be farmed between different crop milestones.
@@ -1397,6 +1498,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Sirih NPC Helper. - ksndq (https://github.com/hannibal002/SkyHanni/pull/3525)
     + Shows a clickable message that grabs sulphur from your sacks when talking to Sirih while he is a pig.
 + Show Exes, Wais and Zees hitbox. - HiZe (https://github.com/hannibal002/SkyHanni/pull/2665)
++ Added Avorius Helper for the Crimson Isle. - Destiny (https://github.com/hannibal002/SkyHanni/pull/5441)
 
 </details>
 <details open><summary>
@@ -1405,7 +1507,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 
 </summary>
 
-+ Allow to paste text from clipboard in signs
++ Allows pasting text from clipboard in signs
 + Pet Display (showing the currently selected pet as GUI element, without any fancy XP or level or percentage, but with
   auto-pet support)
 + Hiding exp Bottles lying on the ground.
@@ -1442,6 +1544,10 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Matriarch Helper. - Thunderblade73 (https://github.com/hannibal002/SkyHanni/pull/1385)
     + Highlights the Heavy Pearls.
     + Draws a line to the Heavy Pearls.
++ Added Vanquisher Waypoint Sharing. - itsseth3 (https://github.com/hannibal002/SkyHanni/pull/5197)
+    + Sends appropriate Vanquisher spawned/shared/died message into party/all chat.
+    + Either shares instantly or upon key press.
+    + On-screen indicators: Renders title, waypoint, beacon, and tracers for party member spawns (or global if enabled).
 + Red Scoreboard Numbers - Hides the red numbers in the scoreboard sidebar on the right side of the screen.
 + **Tia Relay Waypoint** - Show the next Relay waypoint for Tia The Fairy, where maintenance for the abiphone network
   needs to be done.
@@ -1535,7 +1641,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
     + Sends a chat message on first SkyHanni startup (starting with this feature, so this version everyone will see this
       message).
     + Shows new features after an update (starting with the next beta, not this one).
-    + Allows to change those settings anytime again with /shdefaultoptions.
+    + Allows changing those settings anytime again with /shdefaultoptions.
 + Show alert when reaching max super-pairs clicks. - pretz
     + Plays a beep sound and sends a message in chat when the player reaches the maximum number of clicks gained for
       super-pairs mini games.
@@ -1550,6 +1656,7 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
         + Animals killed vs. animals that kill themselves
         + Pelts per hour
     + Press the hotkey to accept the next Trevor the Trapper quest. - CalMWolfs
++ Added ability to show the radius given by Talbot's Theodolite. - Maxwell Zhao (https://github.com/hannibal002/SkyHanni/pull/5293)
 + **GUI Scale**: - nea
     + Scroll within the position editor to independently adjust the GUI scale for each SkyHanni element.
     + Change the global scale of all SkyHanni elements at once (in the config under /sh scale).
@@ -1791,6 +1898,30 @@ Use `/sh` or `/skyhanni` to open the SkyHanni config in game.
 + Added Middle Click Fix for 1.21.x. - Luna (https://github.com/hannibal002/SkyHanni/pull/4863)
     + This fixes not being able to middle click items in inventories (e.g. to disable a full set bonus or a rune).
 + \* Few extra features not worth mentioning. - nopo (https://github.com/hannibal002/SkyHanni/pull/4902)
++ Added Particle Colour Fixer. - Fazfoxy (https://github.com/hannibal002/SkyHanni/pull/4993)
+  + This makes particles have the same colours as they do on 1.8.
++ Added Anti Super Crafting Overpay. - Hype_the_Time (https://github.com/hannibal002/SkyHanni/pull/5022)
+    + Blocks Super Crafts (bypassable) if you can save more than X coins by instantly selling the mats and instant buying the item directly.
++ Added downloading community shtodos. - nopo & CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/5048)
+    + Access via /shtodos or download directly from /shdownloadtodo.
+    + If you want your own todos featured, post them in Discord.
++ Added support for 1.21.11. - nopo + CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/5178)
++ Added Transparent Minecraft Farming feature. - nopo (https://github.com/hannibal002/SkyHanni/pull/5178)
++ Added the ability to move and scale the Action Bar in the GUI Editor. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/5218)
++ Added the ability to move and scale the Held Item Tooltip in the GUI Editor. - hannibal2 (https://github.com/hannibal002/SkyHanni/pull/5218)
++ Added Deployable Overlay. - nopo (https://github.com/hannibal002/SkyHanni/pull/5506)
++ Added Crash on Tic-Tac-Toe Fail in Dungeons. - Webhead1104 (https://github.com/hannibal002/SkyHanni/pull/5589)
++ Added Lotus Atoll island support. - legentpc (https://github.com/hannibal002/SkyHanni/pull/5745)
++ Added support for Minecraft 26.1–26.1.2. - nopo, Daveed, Luna, Alex, Rain (https://github.com/hannibal002/SkyHanni/pull/5763)
++ Added Oringo Pet in Calendar. - Avrg (https://github.com/hannibal002/SkyHanni/pull/5931)
+    + Show the future legendary pet Oringo will offer in the Calendar.
++ Added Deployable Reminder. - Avrg (https://github.com/hannibal002/SkyHanni/pull/5886)
+    + A reminder to place down your power orb for Slayer, umbrella for Trophy Fishing, and lantern for Mineshafts.
++ Re-added the old Glowing Dropped Items feature for the items Hypixel doesn't glow. - Luna (https://github.com/hannibal002/SkyHanni/pull/5758)
+    + This does not glow them through walls, unlike the old feature.
++ Added /shnavall. - CalMWolfs (https://github.com/hannibal002/SkyHanni/pull/6251)
+    + Navigate to all occurrences of a target on an island.
+    + May be useful for new points of interest on Honey Hives (Torrhus Canyon), and the Bells and Hideyho (Safari).
 
 </details>
 <details open><summary>

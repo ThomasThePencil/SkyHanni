@@ -1,7 +1,6 @@
 package at.hannibal2.skyhanni.config.features.foraging
 
 import at.hannibal2.skyhanni.config.FeatureToggle
-import at.hannibal2.skyhanni.config.OnlyModern
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.Category
@@ -9,10 +8,6 @@ import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 import io.github.notenoughupdates.moulconfig.annotations.SearchTag
 
-/**
- * Attention developers:
- * If your feature can only be used on the foraging islands please mark it with @[OnlyModern]
- */
 class ForagingConfig {
 
     @Expose
@@ -25,32 +20,41 @@ class ForagingConfig {
 
     @Expose
     @ConfigOption(name = "Starlyn Contests", desc = "")
-    @SearchTag("Agatha")
+    @SearchTag("Agatha Miria")
     @Accordion
     val starlynContest: StarlynContestsConfig = StarlynContestsConfig()
 
     @Expose
     @ConfigOption(name = "Foraging Tutorial Quest", desc = "")
     @Accordion
-    @OnlyModern
     val tutorialQuest: ForagingTutorialQuestConfig = ForagingTutorialQuestConfig()
 
     @Expose
-    @ConfigOption(name = "Moonglade Beacon", desc = "Settings for the moonglade beacon.")
-    @OnlyModern
+    @ConfigOption(name = "Foraging Beacon", desc = "Settings for the foraging beacons.")
     @Accordion
-    var moongladeBeacon = MoongladeBeaconConfig()
+    val foragingBeacon = ForagingBeaconConfig()
 
     @Expose
     @ConfigOption(name = "Foraging Tracker", desc = "")
-    @OnlyModern
     @Accordion
     val tracker = ForagingTrackerConfig()
 
     @Expose
-    @ConfigOption(name = "Mute Phantoms", desc = "Silences Phantoms in the Galatea.")
+    @ConfigOption(name = "Honeyhive Reminder", desc = "")
+    @Accordion
+    val honeyhiveReminder = HoneyhiveReminderConfig()
+
+    @Expose
+    @ConfigOption(name = "Mute Phantoms", desc = "Silences Phantoms in Moonglade Marsh.")
     @ConfigEditorBoolean
     @FeatureToggle
-    @OnlyModern
     var mutePhantoms = true
+
+    @Expose
+    @ConfigOption(name = "Mute Fusion Machine", desc = "Silences Fusion Machine sounds in Moonglade Marsh.")
+    @ConfigEditorBoolean
+    @FeatureToggle
+    @SearchTag("box firework")
+    var muteFusionMachine = true
+
 }

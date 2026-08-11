@@ -8,6 +8,7 @@ import at.hannibal2.skyhanni.events.SecondPassedEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.features.inventory.chocolatefactory.data.ChocolateAmount
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
+import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.DisplayTableEntry
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPrice
 import at.hannibal2.skyhanni.utils.ItemPriceUtils.getPriceOrNull
@@ -25,14 +26,16 @@ import at.hannibal2.skyhanni.utils.RegexUtils.groupOrNull
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
-import at.hannibal2.skyhanni.utils.StringUtils.addStrikethorugh
+import at.hannibal2.skyhanni.utils.StringUtils.addStrikethrough
 import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.UtilsPatterns
+import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addString
+import at.hannibal2.skyhanni.utils.compat.mapToComponents
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.RenderableUtils
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object CFShopPrice {
@@ -65,7 +68,7 @@ object CFShopPrice {
 
     var inInventory = false
     private var callUpdate = false
-    var inventoryItems = emptyMap<Int, ItemStack>()
+    var inventoryItems = emptyMap<Int, SafeItemStack>()
 
     private const val MILESTONE_INDEX = 50
     private var chocolateSpent = 0L
@@ -93,7 +96,9 @@ object CFShopPrice {
         if (!callUpdate) {
             products.forEach { it.slot = null }
         }
-        update()
+        DelayedRun.runOrNextTick {
+            update()
+        }
     }
 
     private fun updateProducts() {
@@ -154,11 +159,11 @@ object CFShopPrice {
             }
             table.add(
                 DisplayTableEntry(
-                    product.name.addStrikethorugh(!product.canBeBought),
-                    "§6§l$perFormat",
+                    product.name.addStrikethrough(!product.canBeBought).asComponent(),
+                    "§6§l$perFormat".asComponent(),
                     factor,
                     product.item,
-                    hover,
+                    hover.mapToComponents(),
                     highlightsOnHoverSlots = product.slot?.let { listOf(it) }.orEmpty(),
                 ),
             )
@@ -182,7 +187,7 @@ object CFShopPrice {
     }
 
     @HandleEvent
-    fun onBackgroundDraw(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
+    fun onChestGuiRender(event: GuiRenderEvent.ChestGuiOverlayRenderEvent) {
         if (inInventory) {
             config.position.renderRenderables(
                 display,
@@ -193,7 +198,7 @@ object CFShopPrice {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!inInventory) return
         itemBoughtPattern.matchMatcher(event.message) {
             val item = group("item")

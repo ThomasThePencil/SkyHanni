@@ -4,12 +4,11 @@ import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.events.GuiContainerEvent
-import at.hannibal2.skyhanni.events.GuiContainerEvent.ClickType
 import at.hannibal2.skyhanni.events.GuiKeyPressEvent
 import at.hannibal2.skyhanni.events.InventoryFullyOpenedEvent
 import at.hannibal2.skyhanni.events.RenderItemTipEvent
 import at.hannibal2.skyhanni.events.minecraft.ClientDisconnectEvent
-import at.hannibal2.skyhanni.events.minecraft.ToolTipEvent
+import at.hannibal2.skyhanni.events.minecraft.ToolTipTextEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.DelayedRun
 import at.hannibal2.skyhanni.utils.InventoryUtils
@@ -20,6 +19,7 @@ import at.hannibal2.skyhanni.utils.RegexUtils.anyMatches
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.compat.ColoredBlockCompat.Companion.isStainedClay
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.container
 import at.hannibal2.skyhanni.utils.compat.formattedTextCompatLeadingWhiteLessResets
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
@@ -27,6 +27,7 @@ import com.mojang.blaze3d.systems.RenderSystem
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.world.SimpleContainer
+import net.minecraft.world.inventory.ContainerInput
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -64,7 +65,7 @@ object HarpFeatures {
     private fun isMenuGui(chestName: String) = menuTitlePattern.matches(chestName)
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onGui(event: GuiKeyPressEvent) {
+    fun onGuiKeyPress(event: GuiKeyPressEvent) {
         if (!config.keybinds) return
         if (!isHarpGui(InventoryUtils.openInventoryName())) return
         val chest = event.guiContainer as? ContainerScreen ?: return
@@ -76,7 +77,7 @@ object HarpFeatures {
 
             event.cancel()
 
-            InventoryUtils.clickSlot(37 + index, chest.container.containerId, mouseButton = 2, mode = ClickType.MIDDLE)
+            InventoryUtils.clickSlot(37 + index, chest.container.containerId, mouseButton = 2, mode = ContainerInput.CLONE)
             lastClick = SimpleTimeMark.now()
             break
         }
@@ -107,7 +108,7 @@ object HarpFeatures {
     }
 
     private fun updateScale() {
-        if (Minecraft.getInstance().screen == null) {
+        if (MinecraftCompat.screen == null) {
             DelayedRun.runNextTick {
                 updateScale()
             }
@@ -140,7 +141,7 @@ object HarpFeatures {
     private var isGuiScaled = false
 
     private fun setGuiScale() {
-        Minecraft.getInstance().execute {
+        DelayedRun.runOrNextTick {
             guiSetting = getMinecraftGuiScale()
             setMinecraftGuiScale(0)
             isGuiScaled = true
@@ -150,7 +151,7 @@ object HarpFeatures {
 
     private fun unSetGuiScale() {
         if (!isGuiScaled) return
-        Minecraft.getInstance().execute {
+        DelayedRun.runOrNextTick {
             setMinecraftGuiScale(guiSetting)
             isGuiScaled = false
         }
@@ -174,7 +175,7 @@ object HarpFeatures {
         if (isHarpGui(InventoryUtils.openInventoryName())) {
             if (config.keybinds) {
                 // needed to not send duplicate clicks via keybind feature
-                if (event.clickType == ClickType.HOTBAR) {
+                if (event.clickType == ContainerInput.SWAP) {
                     event.cancel()
                     return
                 }
@@ -185,7 +186,7 @@ object HarpFeatures {
         if (!isMenuGui(InventoryUtils.openInventoryName())) return
         if (event.slot?.index != CLOSE_BUTTON_SLOT) return
         if (openTime.passedSince() > 2.seconds) return
-        val indexOfFirst = event.container.slots.filterNotNull().indexOfFirst {
+        val indexOfFirst = event.container.slots.indexOfFirst {
             songSelectedPattern.anyMatches(it.item.getLore())
         }
         indexOfFirst.takeIf { it != -1 }?.let {
@@ -216,10 +217,10 @@ object HarpFeatures {
     }
 
     @HandleEvent(onlyOnSkyblock = true)
-    fun onToolTip(event: ToolTipEvent) {
+    fun onToolTip(event: ToolTipTextEvent) {
         if (!config.hideMelodyTooltip) return
         if (!isHarpGui(InventoryUtils.openInventoryName())) return
-        if (event.slot.container !is SimpleContainer) return
+        if (event.slot?.container !is SimpleContainer) return
         event.cancel()
     }
 }

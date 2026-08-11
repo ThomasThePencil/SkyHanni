@@ -1,8 +1,7 @@
 package at.hannibal2.skyhanni.utils
 
 import at.hannibal2.skyhanni.api.enoughupdates.ItemResolutionQuery
-import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.events.NeuRepositoryReloadEvent
+import at.hannibal2.skyhanni.data.model.SkyblockStat
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NeuItems.getItemStackOrNull
@@ -14,9 +13,14 @@ import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 @SkyHanniModule
 object ItemNameResolver {
     private val itemNameCache = mutableMapOf<String, NeuInternalName>() // item name -> internal name
+    private val HAY_BALE = "HAY_BALE".toInternalName()
+    private val HAY_BLOCK = "HAY_BLOCK".toInternalName()
 
     @Suppress("ReturnCount", "CyclomaticComplexMethod")
     internal fun getInternalNameOrNull(itemName: String): NeuInternalName? {
+        // Without this the fallback below would resolve the name anyway, just to a random candidate.
+        if (NeuItems.isAmbiguousDisplayName(itemName)) return null
+
         val lowercase = itemName.lowercase()
         itemNameCache[lowercase]?.let {
             return it
@@ -31,7 +35,7 @@ object ItemNameResolver {
         }
 
         ItemResolutionQuery.resolveEnchantmentByName(itemName)?.let {
-            return itemNameCache.getOrPut(lowercase) { fixEnchantmentName(it) }
+            return itemNameCache.getOrPut(lowercase) { fixEnchantmentName(it.asString()) }
         }
 
         resolveEnchantmentByCleanName(itemName)?.let {
@@ -46,22 +50,10 @@ object ItemNameResolver {
             val split = lowercase.split(" ")
             if (split.size == 3) {
                 val gemstoneQuery = "${
-                    when (split[1]) {
-                        "jade", "peridot", "citrine" -> '☘'
-                        "amethyst" -> '❈'
-                        "ruby" -> '❤'
-                        "amber" -> '⸕'
-                        "opal" -> '❂'
-                        "topaz" -> '✧'
-                        "onyx" -> '☠'
-                        "sapphire" -> '✎'
-                        "aquamarine" -> '☂'
-                        "jasper" -> '❁'
-                        else -> ' '
-                    }
+                    resolveGemstoneToStat(split[1])?.hypixelIcon ?: ' '
                 } ${split.joinToString("_").allLettersFirstUppercase()}"
                 ItemResolutionQuery.findInternalNameByDisplayName(gemstoneQuery, true)?.let {
-                    return itemNameCache.getOrPut(lowercase) { it.toInternalName() }
+                    return itemNameCache.getOrPut(lowercase) { it }
                 }
             }
         }
@@ -70,11 +62,8 @@ object ItemNameResolver {
             "SUPERBOOM TNT" -> "SUPERBOOM_TNT".toInternalName()
             else -> {
                 ItemResolutionQuery.findInternalNameByDisplayName(itemName, true)?.let {
-
                     // This fixes a NEU bug with §9Hay Bale (cosmetic item)
-                    // TODO remove workaround when this is fixed in neu
-                    val rawInternalName = if (it == "HAY_BALE") "HAY_BLOCK" else it
-                    rawInternalName.toInternalName()
+                    if (it == HAY_BALE) HAY_BLOCK else it
                 } ?: return null
             }
         }
@@ -82,6 +71,23 @@ object ItemNameResolver {
         itemNameCache[lowercase] = internalName
         return internalName
     }
+
+    private fun resolveGemstoneToStat(itemName: String): SkyblockStat? =
+        when (itemName) {
+            "jade" -> MINING_FORTUNE
+            "peridot" -> FARMING_FORTUNE
+            "citrine" -> FORAGING_FORTUNE
+            "amethyst" -> DEFENSE
+            "ruby" -> HEALTH
+            "amber" -> MINING_SPEED
+            "opal" -> TRUE_DEFENSE
+            "topaz" -> PRISTINE
+            "onyx" -> CRIT_DAMAGE
+            "sapphire" -> INTELLIGENCE
+            "aquamarine" -> FISHING_SPEED
+            "jasper" -> STRENGTH
+            else -> null
+        }
 
     private fun resolvePetWithRarity(itemName: String): NeuInternalName? {
         val splits = itemName.split(" ").takeIf { it.size > 1 } ?: return null
@@ -115,6 +121,7 @@ object ItemNameResolver {
         return null
     }
 
+    // Todo use repo for this
     // Workaround for duplex
     private val duplexPattern = "ULTIMATE_DUPLEX;(?<tier>.*)".toPattern()
 
@@ -123,8 +130,7 @@ object ItemNameResolver {
             val tier = group("tier")
             return "ULTIMATE_REITERATE;$tier".toInternalName()
         }
-        // TODO USE SH-REPO
-        return originalName.toInternalName()
+        return originalName.removeColor().toInternalName()
     }
 
     private fun getInternalNameOrNullIgnoreCase(itemName: String): NeuInternalName? {
@@ -139,8 +145,7 @@ object ItemNameResolver {
         return NeuItems.allItemsCache.filter { it.key.removeColor() == removeColor }.values.firstOrNull()
     }
 
-    @HandleEvent(NeuRepositoryReloadEvent::class)
-    fun onNeuRepoReload() {
+    internal fun clearCache() {
         itemNameCache.clear()
     }
 }

@@ -6,14 +6,14 @@ import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.events.CheckRenderEntityEvent
 import at.hannibal2.skyhanni.events.DamageIndicatorFinalBossEvent
+import at.hannibal2.skyhanni.events.ParticleEvent
 import at.hannibal2.skyhanni.events.PlaySoundEvent
-import at.hannibal2.skyhanni.events.ReceiveParticleEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.entity.EntityHealthUpdateEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
+import at.hannibal2.skyhanni.utils.PlayerUtils
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
-import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
 import at.hannibal2.skyhanni.utils.compat.MinecraftCompat.isLocalPlayer
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import net.minecraft.client.player.RemotePlayer
@@ -41,7 +41,7 @@ object DungeonCleanEnd {
     private var lastBossId: Int = -1
 
     @HandleEvent(onlyOnIsland = IslandType.CATACOMBS)
-    fun onChat(event: SkyHanniChatEvent) {
+    fun onChat(event: SkyHanniChatEvent.Allow) {
         if (!config.enabled) return
 
         val message = event.message
@@ -101,7 +101,7 @@ object DungeonCleanEnd {
             DungeonApi.isOneOf("F3", "M3") &&
             entity is Guardian &&
             entity.id != lastBossId &&
-            MinecraftCompat.localPlayer.isShiftKeyDown
+            PlayerUtils.isSneaking()
         ) {
             return
         }
@@ -114,7 +114,7 @@ object DungeonCleanEnd {
     }
 
     @HandleEvent(onlyOnIsland = IslandType.CATACOMBS)
-    fun onReceiveParticle(event: ReceiveParticleEvent) {
+    fun onParticle(event: ParticleEvent) {
         if (shouldBlock()) {
             event.cancel()
         }
@@ -122,7 +122,7 @@ object DungeonCleanEnd {
 
     @HandleEvent(onlyOnIsland = IslandType.CATACOMBS)
     fun onPlaySound(event: PlaySoundEvent) {
-        if (shouldBlock() && !chestsSpawned && event.soundName.startsWith("note.")) {
+        if (shouldBlock() && !chestsSpawned && event.soundName.startsWith("block.note_block.")) {
             event.cancel()
         }
     }

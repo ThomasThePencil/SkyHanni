@@ -9,23 +9,21 @@ import at.hannibal2.skyhanni.events.SkyHanniRenderEntityEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.EntityUtils.getArmorInventory
 import at.hannibal2.skyhanni.utils.EntityUtils.isNpc
-import at.hannibal2.skyhanni.utils.FakePlayer
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.compat.EffectsCompat
 import at.hannibal2.skyhanni.utils.compat.EffectsCompat.Companion.hasPotionEffect
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.world.entity.player.Player
-import net.minecraft.world.item.ItemStack
 
 @SkyHanniModule
 object HideArmor {
 
     val config: HideArmorConfig get() = SkyHanniMod.feature.misc.hideArmor
-    private var armor = mapOf<Int, ItemStack>()
+    private var armor = mapOf<Int, SafeItemStack>()
 
     fun shouldHideArmor(entity: Player): Boolean {
         if (!SkyBlockUtils.inSkyBlock) return false
-        if (entity is FakePlayer) return false
         if (entity.hasPotionEffect(EffectsCompat.INVISIBILITY)) return false
         if (entity.isNpc()) return false
 
@@ -71,6 +69,5 @@ object HideArmor {
     @HandleEvent
     fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
         event.move(91, "misc.hideArmor2", "misc.hideArmor")
-
     }
 }

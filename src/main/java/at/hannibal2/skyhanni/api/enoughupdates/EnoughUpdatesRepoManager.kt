@@ -15,16 +15,19 @@ object EnoughUpdatesRepoManager : AbstractRepoManager<NeuRepositoryReloadEvent>(
     override val commonShortNameCased = "NEU"
     override val configDirectory = EnoughUpdatesManager.configDirectory
     override val config get(): NeuRepositoryConfig = SkyHanniMod.feature.dev.neuRepo
-    override val backupRepoResourcePath: String = "assets/skyhanni/neu-repo.zip"
-
+    override val backupRepoResourcePath: String = "assets/skyhanni/neu-repo.tar.gz"
 
     override val reloadCommand: String = "neureloadrepo"
+    override val progressCategory = ChatProgressUpdates.category("NotEnoughUpdates Repo")
     override val statusCommand: String = "neurepostatus"
     override val updateCommand: String = "neuresetrepo"
 
     @HandleEvent
     fun onCommandRegistration(event: CommandRegistrationEvent) = super.registerCommands(event)
 
-    override fun reportExtraStatusInfo() = EnoughUpdatesManager.reportItemStatus()
+    override fun reportExtraStatusInfo() = with(EnoughUpdatesManager) {
+        reportItemStatus()
+        reportRecipeStatus()
+    }
     override suspend fun extraReloadCoroutineWork(progress: ChatProgressUpdates) = EnoughUpdatesManager.reloadItemsFromRepo(progress)
 }

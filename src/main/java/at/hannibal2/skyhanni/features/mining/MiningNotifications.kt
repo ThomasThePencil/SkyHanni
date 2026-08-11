@@ -3,7 +3,7 @@ package at.hannibal2.skyhanni.features.mining
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.GetFromSackApi
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.data.IslandTypeTags
+import at.hannibal2.skyhanni.data.IslandTypeTag
 import at.hannibal2.skyhanni.data.MiningApi
 import at.hannibal2.skyhanni.data.MiningApi.inGlaciteArea
 import at.hannibal2.skyhanni.data.MiningApi.lastColdReset
@@ -60,8 +60,8 @@ object MiningNotifications {
     private var hasSentAscensionRope = false
 
     @HandleEvent
-    fun onChat(event: SkyHanniChatEvent) {
-        if (!IslandTypeTags.MINING.inAny()) return
+    fun onChat(event: SkyHanniChatEvent.Allow) {
+        if (!IslandTypeTag.MINING.isInIsland()) return
         if (!config.enabled) return
         val message = event.message
         when {

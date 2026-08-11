@@ -2,12 +2,11 @@ package at.hannibal2.skyhanni.data
 
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.events.GuiRenderEvent
-import at.hannibal2.skyhanni.events.render.gui.DrawBackgroundEvent
 import at.hannibal2.skyhanni.features.misc.visualwords.VisualWordGui
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.compat.DrawContextUtils
-import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import at.hannibal2.skyhanni.utils.compat.MinecraftCompat
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.ChatScreen
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.client.gui.screens.inventory.InventoryScreen
@@ -16,40 +15,38 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen
 object RenderData {
 
     @JvmStatic
-    fun postRenderOverlay(context: GuiGraphics) {
+    fun postRenderOverlay(context: GuiGraphicsExtractor) {
         if (GlobalRender.renderDisabled) return
         if (GuiEditManager.isInGui() || VisualWordGui.isInGui()) return
-        val screen = Minecraft.getInstance().screen
+        val screen = MinecraftCompat.screen
 
         DrawContextUtils.setContext(context)
-        DrawContextUtils.translated(z = -3) {
-            renderOverlay(DrawContextUtils.drawContext, screen != null && screen !is ChatScreen)
-        }
+        renderOverlay(DrawContextUtils.drawContext, screen != null && screen !is ChatScreen)
         DrawContextUtils.clearContext()
     }
 
     @HandleEvent
-    fun onBackgroundDraw(event: DrawBackgroundEvent) {
+    fun onBackgroundDraw() {
         if (GlobalRender.renderDisabled) return
         if (GuiEditManager.isInGui() || VisualWordGui.isInGui()) return
-        val currentScreen = Minecraft.getInstance().screen ?: return
+        val currentScreen = MinecraftCompat.screen ?: return
         if (currentScreen !is InventoryScreen && currentScreen !is ContainerScreen) return
 
         DrawContextUtils.pushPop {
             if (GuiEditManager.isInGui()) {
-                DrawContextUtils.translated(z = -3) {
-                    renderOverlay(DrawContextUtils.drawContext, true)
-                }
+                renderOverlay(DrawContextUtils.drawContext, true)
             }
         }
 
-        GuiRenderEvent.ChestGuiOverlayRenderEvent(DrawContextUtils.drawContext).post()
+        GuiEditManager.withChestGuiPosition {
+            GuiRenderEvent.ChestGuiOverlayRenderEvent(DrawContextUtils.drawContext).post()
+        }
         GuiRenderEvent.GuiOnTopRenderEvent(DrawContextUtils.drawContext).post()
     }
 
     var outsideInventory = false
 
-    fun renderOverlay(context: GuiGraphics, inventoryPresent: Boolean = false) {
+    fun renderOverlay(context: GuiGraphicsExtractor, inventoryPresent: Boolean = false) {
         outsideInventory = true
         GuiRenderEvent.GuiOverlayRenderEvent(context).post()
         if (!inventoryPresent) GuiRenderEvent.GuiOnTopRenderEvent(context).post()

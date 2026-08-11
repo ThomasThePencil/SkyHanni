@@ -6,13 +6,10 @@ import at.hannibal2.skyhanni.events.DebugDataCollectEvent
 import at.hannibal2.skyhanni.events.ProfileJoinEvent
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.test.command.ErrorManager
-import at.hannibal2.skyhanni.utils.ConfigUtils.jumpToEditor
 import at.hannibal2.skyhanni.utils.EnumUtils.next
 import at.hannibal2.skyhanni.utils.EnumUtils.previous
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import org.apache.commons.net.ntp.NTPUDPClient
 import java.net.InetAddress
 import java.net.SocketTimeoutException
@@ -23,6 +20,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 @SkyHanniModule
 object ComputerTimeOffset {
@@ -94,11 +93,10 @@ object ComputerTimeOffset {
             if (timeoutWarned.passedSince() > 10.minutes) {
                 timeoutMap[ntpServer] = 0
                 timeoutWarned = SimpleTimeMark.now()
-                ChatUtils.clickableChat(
+                ChatUtils.notifyOrDisable(
                     "NTP server $ntpServer is not responding ($timeouts failures). Check your connection, " +
                         "try disconnecting from any VPNs/proxies, or click here to change NTP servers.",
-                    hover = "Click to open Dev Config",
-                    onClick = { devConfig::ntpServer.jumpToEditor() }
+                    devConfig::ntpServer,
                 )
             }
             return@runCatching null
@@ -158,7 +156,7 @@ object ComputerTimeOffset {
     fun onProfileJoin() = DelayedRun.runDelayed(5.seconds, ::tryCheckOffset)
 
     @HandleEvent
-    fun onDebug(event: DebugDataCollectEvent) {
+    fun onDebugDataCollect(event: DebugDataCollectEvent) {
         event.title("Computer Time Offset")
 
         if (state != State.NORMAL) {

@@ -5,12 +5,13 @@ import at.hannibal2.skyhanni.api.HotmApi
 import at.hannibal2.skyhanni.api.HotmApi.MayhemPerk
 import at.hannibal2.skyhanni.api.HotmApi.SkymallPerk
 import at.hannibal2.skyhanni.api.event.HandleEvent
-import at.hannibal2.skyhanni.data.IslandTypeTags
+import at.hannibal2.skyhanni.config.core.config.Position
+import at.hannibal2.skyhanni.config.features.mining.HotmConfig.SkyMallDisplayVisibility
+import at.hannibal2.skyhanni.data.IslandTypeTag
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.jsonobjects.local.HotxTree
 import at.hannibal2.skyhanni.data.model.TabWidget
 import at.hannibal2.skyhanni.events.DebugDataCollectEvent
-import at.hannibal2.skyhanni.events.IslandChangeEvent
 import at.hannibal2.skyhanni.events.ScoreboardUpdateEvent
 import at.hannibal2.skyhanni.events.WidgetUpdateEvent
 import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
@@ -24,11 +25,12 @@ import at.hannibal2.skyhanni.utils.NumberUtil.formatLong
 import at.hannibal2.skyhanni.utils.RegexUtils.firstMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matchMatcher
 import at.hannibal2.skyhanni.utils.RegexUtils.matches
+import at.hannibal2.skyhanni.utils.SafeItemStack
 import at.hannibal2.skyhanni.utils.StringUtils.allLettersFirstUppercase
+import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.addOrPut
 import at.hannibal2.skyhanni.utils.repopatterns.RepoPattern
 import net.minecraft.world.inventory.Slot
-import net.minecraft.world.item.ItemStack
 import java.util.regex.Matcher
 import kotlin.math.pow
 
@@ -282,7 +284,7 @@ enum class HotmData(
     ),
 
     ANOMALOUS_DESIRE(
-        "Anomalous Desire",
+        "Tunnel Vision",
         3,
         { null },
         { level ->
@@ -401,7 +403,7 @@ enum class HotmData(
     MINERS_BLESSING("Miner's Blessing", 1, { null }, { mapOf(HotmReward.MAGIC_FIND to 30.0) }, null),
     ;
 
-    override val guiNamePattern by patternGroup.pattern("perk.name.${name.lowercase().replace("_", "")}", "§.$guiName")
+    override val guiNamePattern by patternGroup.pattern("perk.name.${name.lowercase().replace("_", "")}", guiName)
 
     override val printName = name.allLettersFirstUppercase()
 
@@ -412,7 +414,7 @@ enum class HotmData(
 
     override var slot: Slot? = null
 
-    override var item: ItemStack? = null
+    override var item: SafeItemStack? = null
 
     override val totalCostMaxLevel = calculateTotalCost(maxLevel)
 
@@ -426,7 +428,17 @@ enum class HotmData(
         override val rotatingPerks = SkymallPerk.entries
         override val rotatingPerkEntry: HotmData = SKY_MALL
         override var currentRotPerk = HotmApi.skymall
-        override val applicableIslandType = IslandTypeTags.MINING
+        override val islandTypeTag = IslandTypeTag.MINING
+
+        private val config get() = SkyHanniMod.feature.mining.hotm
+        override val position: Position get() = config.skyMallPosition
+
+        override val shouldShowDisplay
+            get() = when (config.skyMallDisplay) {
+                SkyMallDisplayVisibility.OFF -> false
+                SkyMallDisplayVisibility.MINING_ONLY -> inApplicableIsland
+                SkyMallDisplayVisibility.EVERYWHERE -> true
+            }
 
         val storage get() = ProfileStorageData.profileSpecific?.mining?.hotmTree
 
@@ -445,90 +457,93 @@ enum class HotmData(
          */
         override val levelPattern by patternGroup.pattern(
             "perk.level",
-            "(?:§.)*§(?<color>.)Level (?<level>\\d+).*",
+            "(?:§.)*§(?<color>.)Level (?<level>\\d+).*"
         )
-
         /**
-         * REGEX-TEST: §7§cRequires Mining Speed
-         * REGEX-TEST: §7§cRequires Tier 10
-         * REGEX-TEST: §5Mountain§c!
-         * REGEX-TEST: §7§eClick to unlock!
+         * REGEX-TEST: Requires Mining Speed
+         * REGEX-TEST: Requires Tier 10
+         * REGEX-TEST: Mountain!
+         * REGEX-TEST: Click to unlock!
          */
         override val notUnlockedPattern by patternGroup.pattern(
             "perk.notunlocked",
-            "(?:§.)*Requires.*|.*Mountain(?:§.)*!|(?:§.)*Click to unlock!",
+            """Requires.*|.*Mountain!|Click to unlock!"""
         )
 
         /**
-         * REGEX-TEST: §a§lSELECTED
-         * REGEX-TEST: §a§lENABLED
+         * REGEX-TEST: SELECTED
+         * REGEX-TEST: ENABLED
          */
         override val enabledPattern by patternGroup.pattern(
             "perk.enable",
-            "§a§lENABLED|(?:§.)*SELECTED",
+            """ENABLED|SELECTED"""
         )
 
         /**
-         * REGEX-TEST: §eClick to select!
-         * REGEX-TEST: §c§lDISABLED
+         * REGEX-TEST: Click to select!
+         * REGEX-TEST: DISABLED
          */
         @Suppress("UnusedPrivateProperty")
         private val disabledPattern by patternGroup.pattern(
             "perk.disabled",
-            "§c§lDISABLED|§eClick to select!",
+            """DISABLED|Click to select!"""
         ) // unused for now since the assumption is when enabled isn't found, it is disabled,
         // but the value might be useful in the future or for debugging
 
         /**
-         * REGEX-TEST: §7Cost
+         * REGEX-TEST: Cost
          */
         val perkCostPattern by patternGroup.pattern(
-            "perk.cost",
-            "(?:§.)*§7Cost",
+            "perk.cost.new",
+            """Cost"""
         )
 
         override val resetChatPattern by patternGroup.pattern(
             "reset.chat",
-            "§aReset your §r§5Heart of the Mountain§r§a! Your Perks and Abilities have been reset\\.",
+            """Reset your Heart of the Mountain! Your Perks and Abilities have been reset\."""
         )
 
         override val heartItemPattern by patternGroup.pattern(
             "inventory.heart",
-            "§5Heart of the Mountain",
+            """Heart of the Mountain"""
         )
+
         override val resetItemPattern by patternGroup.pattern(
             "inventory.reset",
-            "§cReset Heart of the Mountain",
+            """Reset Heart of the Mountain"""
         )
 
         /**
-         * REGEX-TEST: §7Token of the Mountain: §515
+         * REGEX-TEST: Token of the Mountain: 15
          */
         override val heartTokensPattern by patternGroup.pattern(
             "inventory.heart.token",
-            "§7Token of the Mountain: §5(?<token>\\d+)",
+            """Token of the Mountain: (?<token>\d+)"""
         )
 
         /**
-         * REGEX-TEST:   §8- §54 Token of the Mountain
+         * WRAPPED-REGEX-TEST: "  - 4 Token of the Mountain"
          */
         override val resetTokensPattern by patternGroup.pattern(
             "inventory.reset.token",
-            "\\s+§8- §5(?<token>\\d+) Token of the Mountain",
-        )
-
-        private val mayhemChatPattern by patternGroup.pattern(
-            "mayhem",
-            "§b§lMAYHEM! §r§7(?<perk>.*)",
+            """\s+-\s*(?<token>\d+) Token of the Mountain"""
         )
 
         /**
-         * REGEX-TEST:  Mithril: §r§299,918
-         * REGEX-TEST:  Gemstone: §r§d37,670
+         * REGEX-TEST: MAYHEM! You received a Mining Fortune buff from your Mineshaft Mayhem perk!
+         */
+        private val mayhemChatPattern by patternGroup.pattern(
+            "mayhem",
+            """MAYHEM! (?<perk>.*)"""
+        )
+
+        /**
+         * WRAPPED-REGEX-TEST: " Mithril: 99,918"
+         * WRAPPED-REGEX-TEST: " Gemstone: 37,670"
          */
         private val powderPattern by patternGroup.pattern(
-            "widget.powder",
-            "\\s*(?<type>\\w+): (?:§.)+(?<amount>[\\d,.]+)",
+            "widget.powder-nocolor",
+            "\\s*(?<type>\\w+): (?<amount>[\\d,.]+)",
         )
         // </editor-fold>
 
@@ -582,6 +597,7 @@ enum class HotmData(
             }
         }
 
+        // Color is needed due to blue goblin omelet
         override val readingLevelTransform: Matcher.() -> Int = {
             group("level").toInt().transformIf({ group("color") == "b" }, { this.minus(1) })
         }
@@ -622,7 +638,7 @@ enum class HotmData(
         fun onWidgetUpdate(event: WidgetUpdateEvent) {
             if (!event.isWidget(TabWidget.POWDER)) return
             event.lines.forEach { line ->
-                powderPattern.matchMatcher(line) {
+                powderPattern.matchMatcher(line.string.removeColor()) {
                     val type = HotmApi.PowderType.entries.firstOrNull { it.displayName == group("type") } ?: return
                     val amount = group("amount").formatLong()
                     type.setAmount(amount, postEvent = true)
@@ -631,22 +647,22 @@ enum class HotmData(
         }
 
         @HandleEvent(onlyOnSkyblock = true)
-        override fun onChat(event: SkyHanniChatEvent) = super.onChat(event)
+        override fun onChat(event: SkyHanniChatEvent.Allow) = super.onChat(event)
 
-        override fun tryBlock(event: SkyHanniChatEvent) {
-            if (!chatConfig.hideSkyMall || IslandTypeTags.MINING.inAny()) return
+        override fun tryBlock(event: SkyHanniChatEvent.Allow) {
+            if (!chatConfig.hideSkyMall || IslandTypeTag.MINING.isInIsland()) return
             event.blockedReason = "skymall"
         }
 
-        override fun extraChatHandling(event: SkyHanniChatEvent) {
+        override fun extraChatHandling(event: SkyHanniChatEvent.Allow) {
             DelayedRun.runNextTick {
-                mayhemChatPattern.matchMatcher(event.message) {
+                mayhemChatPattern.matchMatcher(event.cleanMessage) {
                     val perk = group("perk")
                     HotmApi.mineshaftMayhem = MayhemPerk.entries.firstOrNull { it.chatPattern.matches(perk) } ?: run {
                         ErrorManager.logErrorStateWithData(
                             "Could not read the mayhem effect from chat",
                             "no chatPattern matched",
-                            "chat" to event.message,
+                            "chat" to event.cleanMessage,
                             "perk" to perk,
                         )
                         null
@@ -657,14 +673,14 @@ enum class HotmData(
         }
 
         @HandleEvent
-        fun onIslandChange(event: IslandChangeEvent) {
+        fun onIslandChange() {
             if (HotmApi.mineshaftMayhem == null) return
             HotmApi.mineshaftMayhem = null
             ChatUtils.debug("resetting mineshaftMayhem")
         }
 
         @HandleEvent
-        fun onDebug(event: DebugDataCollectEvent) {
+        fun onDebugDataCollect(event: DebugDataCollectEvent) {
             event.title("HotM")
             event.addIrrelevant {
                 add("Tokens : $availableTokens/$tokens")

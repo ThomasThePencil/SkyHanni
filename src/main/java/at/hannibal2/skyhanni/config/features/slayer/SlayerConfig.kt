@@ -1,17 +1,22 @@
 package at.hannibal2.skyhanni.config.features.slayer
 
+import at.hannibal2.skyhanni.api.event.HandleEvent
+import at.hannibal2.skyhanni.config.ConfigUpdaterMigrator
 import at.hannibal2.skyhanni.config.FeatureToggle
+import at.hannibal2.skyhanni.config.core.config.Position
 import at.hannibal2.skyhanni.config.features.slayer.blaze.BlazeConfig
 import at.hannibal2.skyhanni.config.features.slayer.endermen.EndermanConfig
 import at.hannibal2.skyhanni.config.features.slayer.spider.SpiderConfig
 import at.hannibal2.skyhanni.config.features.slayer.vampire.VampireConfig
 import at.hannibal2.skyhanni.features.slayer.HideSlayerSpawnParticles.SpawnParticles
+import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import com.google.gson.annotations.Expose
 import io.github.notenoughupdates.moulconfig.annotations.Accordion
 import io.github.notenoughupdates.moulconfig.annotations.Category
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorSlider
+import io.github.notenoughupdates.moulconfig.annotations.ConfigLink
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 import io.github.notenoughupdates.moulconfig.annotations.SearchTag
 import io.github.notenoughupdates.moulconfig.observer.Property
@@ -62,6 +67,16 @@ class SlayerConfig {
     @ConfigOption(name = "Boss Spawn Warning", desc = "")
     @Accordion
     val slayerBossWarning: SlayerBossWarningConfig = SlayerBossWarningConfig()
+
+    @Expose
+    @ConfigOption(name = "Slayer Time Messages", desc = "")
+    @Accordion
+    val slayerTimeMessages: SlayerTimeMessagesConfig = SlayerTimeMessagesConfig()
+
+    @Expose
+    @ConfigOption(name = "Remaining Kills Display", desc = "")
+    @Accordion
+    val slayerRemainingKills: SlayerRemainingKillsConfig = SlayerRemainingKillsConfig()
 
     @Expose
     @ConfigOption(name = "Active Boss Transparency", desc = "")
@@ -125,7 +140,7 @@ class SlayerConfig {
     @Expose
     @ConfigOption(
         name = "Hide Irrelevant Mobs",
-        desc = "Makes mobs partially transparent so that they dont annoy while having an active slayer quest. " +
+        desc = "Makes mobs partially transparent so that they don't annoy while having an active slayer quest. " +
             "Useful for e.g. Magma Cubes in Burning Desert for Tara Slayer.",
     )
     @SearchTag("tarantula spider opacity")
@@ -135,29 +150,12 @@ class SlayerConfig {
 
     @Expose
     @ConfigOption(
-        name = "Adjust Irrelevant Opacity",
-        desc = "Adjust the opacity of irrelevant mobs. (in %)",
+        name = "Adjust Irrelevant Transparency",
+        desc = "Adjust the transparency of irrelevant mobs. (in %)",
     )
     @SearchTag("magma cube tarantula tara spider slayer quest")
     @ConfigEditorSlider(minValue = 0f, maxValue = 100f, minStep = 1f)
-    var hideIrrelevantMobsOpacity: Int = 40
-
-    @Expose
-    @ConfigOption(name = "Time to Kill Message", desc = "Sends time to kill a slayer in chat.")
-    @ConfigEditorBoolean
-    @FeatureToggle
-    var timeToKillMessage: Boolean = true
-
-    @Expose
-    @ConfigOption(name = "Quest Complete Message", desc = "Sends time to complete (Spawn & Kill) a slayer quest in chat.")
-    @ConfigEditorBoolean
-    @FeatureToggle
-    var questCompleteMessage: Boolean = true
-
-    @Expose
-    @ConfigOption(name = "Compact Time Messages", desc = "Shorter Time to Kill and Quest Complete messages.")
-    @ConfigEditorBoolean
-    var compactTimeMessage: Boolean = false
+    var hideIrrelevantMobsTransparency: Int = 40
 
     @Expose
     @ConfigOption(name = "Slayer Cocoon Title", desc = "Send title when Slayer Boss is cocooned.")
@@ -165,7 +163,7 @@ class SlayerConfig {
     var cocoonTitle: Boolean = false
 
     @Expose
-    @ConfigOption(name = "Slayer Cocoon Notification Sound", desc = "Sends note.pling when Slayer Boss is cocooned.")
+    @ConfigOption(name = "Slayer Cocoon Notification Sound", desc = "Sends a sound notification when your Slayer Boss is cocooned.")
     @ConfigEditorBoolean
     var cocoonDing: Boolean = false
 
@@ -178,4 +176,32 @@ class SlayerConfig {
     @ConfigOption(name = "Hide Damage Splashes Near Slayer Boss", desc = "Hides Damage Splashes Near Slayer Boss.")
     @ConfigEditorBoolean
     var damageSplashHider: Boolean = false
+
+    @Expose
+    @ConfigOption(
+        name = "No Gummy Warning",
+        desc = "Sends a warning when you don't have a Re-Heated Gummy Polar Bear active " +
+            "while you have Habanero Tactics on your gear, or are in the Smoldering Tomb."
+    )
+    @ConfigEditorBoolean
+    @FeatureToggle
+    var gummyWarning: Boolean = true
+
+    @Expose
+    @ConfigLink(owner = SlayerConfig::class, field = "gummyWarning")
+    val gummyWarningPosition: Position = Position(2, 100)
+
+    @SkyHanniModule
+    companion object {
+        @HandleEvent
+        fun onConfigFix(event: ConfigUpdaterMigrator.ConfigFixEvent) {
+            val oldPath = "slayer."
+            event.move(126, "${oldPath}hideIrrelevantMobsOpacity", "${oldPath}hideIrrelevantMobsTransparency")
+            val remainingKillsPath = "${oldPath}slayerRemainingKills."
+            event.move(138, "${oldPath}remainingKills", "${remainingKillsPath}display")
+            event.move(138, "${oldPath}remainingKillsLevel", "${remainingKillsPath}includeMobLevel")
+            event.move(138, "${oldPath}remainingKillsHealth", "${remainingKillsPath}includeMobHealth")
+            event.move(138, "${oldPath}remainingKillsPosition", "${remainingKillsPath}remainingKillsPosition")
+        }
+    }
 }

@@ -3,29 +3,33 @@ package at.hannibal2.skyhanni.features.misc.pathfind
 import at.hannibal2.skyhanni.SkyHanniMod
 import at.hannibal2.skyhanni.api.event.HandleEvent
 import at.hannibal2.skyhanni.config.commands.CommandRegistrationEvent
+import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierArguments
+import at.hannibal2.skyhanni.config.commands.brigadier.BrigadierUtils
+import at.hannibal2.skyhanni.config.commands.brigadier.arguments.LorenzVecArgumentType
 import at.hannibal2.skyhanni.data.IslandGraphs
 import at.hannibal2.skyhanni.data.IslandGraphs.pathFind
-import at.hannibal2.skyhanni.data.model.GraphNode
-import at.hannibal2.skyhanni.data.model.GraphNodeTag
+import at.hannibal2.skyhanni.data.model.graph.GraphNode
+import at.hannibal2.skyhanni.data.model.graph.GraphNodeTag
 import at.hannibal2.skyhanni.skyhannimodule.SkyHanniModule
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.GraphUtils
-import at.hannibal2.skyhanni.utils.LorenzVec.Companion.toLorenzVec
 import at.hannibal2.skyhanni.utils.NumberUtil.roundTo
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
+import at.hannibal2.skyhanni.utils.StringUtils.removeColor
 import at.hannibal2.skyhanni.utils.chat.TextHelper
 import at.hannibal2.skyhanni.utils.chat.TextHelper.asComponent
 import at.hannibal2.skyhanni.utils.chat.TextHelper.onClick
 import at.hannibal2.skyhanni.utils.chat.TextHelper.send
 import at.hannibal2.skyhanni.utils.collection.CollectionUtils.sorted
-import at.hannibal2.skyhanni.utils.collection.CollectionUtils.takeIfAllNotNull
 import at.hannibal2.skyhanni.utils.compat.hover
 
 @SkyHanniModule
 object NavigationHelper {
+    private val config get() = SkyHanniMod.feature.misc.navigation
+
     private val messageId = ChatUtils.getUniqueMessageId()
 
-    val allowedTags = listOf(
+    val allowedSingleNavigationTags = setOf(
         GraphNodeTag.NPC,
         GraphNodeTag.AREA,
         GraphNodeTag.SMALL_AREA,
@@ -34,37 +38,39 @@ object NavigationHelper {
         GraphNodeTag.GRIND_MOBS,
         GraphNodeTag.GRIND_ORES,
         GraphNodeTag.GRIND_CROPS,
-        GraphNodeTag.MINES_EMISSARY,
         GraphNodeTag.CRIMSON_MINIBOSS,
     )
 
-    private fun onCommand(args: Array<String>) {
-        if (args.size == 3) {
-            args.map { it.toDoubleOrNull() }.takeIfAllNotNull()?.let {
-                val location = it.toLorenzVec()
-                pathFind(location.add(-1, -1, -1), "Custom Goal", condition = { true })
-                with(location) {
-                    ChatUtils.chat("Started Navigating to custom goal at §f$x $y $z", messageId = messageId)
-                }
-                return
-            }
-        }
-
-        SkyHanniMod.launchCoroutine("shnavigate command") {
-            doCommandAsync(args)
-        }
-    }
-
-    private fun doCommandAsync(args: Array<String>) {
-        val searchTerm = args.joinToString(" ").lowercase()
+    private fun doCommandAsync(searchTerm: String) {
         val distances = calculateDistances(searchTerm)
         val locations = calculateNames(distances)
 
         val goBack = {
-            onCommand(searchTerm.split(" ").toTypedArray())
-            IslandGraphs.stop()
+            doCommandAsync(searchTerm)
+            IslandGraphs.stopNavigation()
         }
         val title = if (searchTerm.isBlank()) "SkyHanni Navigation Locations" else "SkyHanni Navigation Locations Matching: \"$searchTerm\""
+
+        if (config.allowInstantNavigation) {
+            val exactMatch = locations.firstOrNull { (name, _) ->
+                name.substringBefore(" §7(").equals(searchTerm, ignoreCase = true)
+            }
+
+            val target = exactMatch ?: locations.takeIf { it.size == 1 }?.first()
+
+            if (target != null) {
+                val (name, node) = target
+                node.pathFind(label = name, allowRerouting = true, condition = { true })
+
+                val message = if (exactMatch != null) {
+                    "§7Exact match found, navigating to §r$name"
+                } else {
+                    "§7Only one location found, navigating to §r$name"
+                }
+                sendNavigateMessageWithContent(message, goBack)
+                return
+            }
+        }
 
         TextHelper.displayPaginatedList(
             title,
@@ -78,29 +84,32 @@ object NavigationHelper {
                 node.pathFind(label = name, allowRerouting = true, condition = { true })
                 sendNavigateMessage(name, goBack)
             }
-            val tag = node.tags.first { it in allowedTags }
+            val tag = node.tags.first { it in allowedSingleNavigationTags }
             val hoverText = "Name: $name\n§7Type: §r${tag.displayName}\n§7Distance: §e$distance blocks\n§eClick to start navigating!"
             component.hover = hoverText.asComponent()
             component
         }
     }
 
-    private fun sendNavigateMessage(name: String, goBack: () -> Unit) {
-        val componentText = "§7Navigating to §r$name".asComponent()
+    private fun sendNavigateMessageWithContent(content: String, goBack: () -> Unit) {
+        val componentText = content.asComponent()
         componentText.onClick(onClick = goBack)
         componentText.hover = "§eClick to stop navigating and return to previous search".asComponent()
         componentText.send(messageId)
     }
 
+    private fun sendNavigateMessage(name: String, goBack: () -> Unit) =
+        sendNavigateMessageWithContent("§7Started navigating to §r$name§7. ", goBack)
+
     private fun calculateNames(distances: Map<GraphNode, Double>): List<Pair<String, GraphNode>> {
         val names = mutableMapOf<String, GraphNode>()
         for (node in distances.sorted().keys) {
             // hiding areas that are none
-            if (node.name == "no_area") continue
+            if (node.name == AreaNode.NO_AREA) continue
             // no need to navigate to the current area
             if (node.name == SkyBlockUtils.graphArea) continue
-            val tag = node.tags.first { it in allowedTags }
-            val name = "${node.name} §7(${tag.displayName}§7)"
+            val tag = node.tags.first { it in allowedSingleNavigationTags }
+            val name = "${node.cleanName} §7(${tag.displayName}§7)"
             if (name in names) continue
             names[name] = node
         }
@@ -115,8 +124,9 @@ object NavigationHelper {
 
         val distances = mutableMapOf<GraphNode, Double>()
         for (node in graph) {
-            val name = node.name ?: continue
-            val remainingTags = node.tags.filter { it in allowedTags }
+            if (!node.enabled) continue
+            val name = node.cleanName ?: continue
+            val remainingTags = node.tags.filter { it in allowedSingleNavigationTags }
             if (remainingTags.isEmpty()) continue
             if (name.lowercase().contains(searchTerm)) {
                 distances[node] = GraphUtils.findShortestDistance(closestNode, node)
@@ -129,10 +139,34 @@ object NavigationHelper {
     }
 
     @HandleEvent
-    fun onCommandRegistration(event: CommandRegistrationEvent) {
+    private fun onCommandRegistration(event: CommandRegistrationEvent) {
         event.registerBrigadier("shnavigate") {
-            description = "Using path finder to go to locations"
-            legacyCallbackArgs { onCommand(it) }
+            description = "Use the path finder to go to a specific location"
+            aliases = listOf("shnav")
+            argCallback("coords", LorenzVecArgumentType.double()) { location ->
+                pathFind(location, "Custom Goal", condition = { true })
+                ChatUtils.chat("Started Navigating to custom goal at §f${location.toLocalFormat()}", messageId = messageId)
+            }
+            argCallback("search", BrigadierArguments.greedyString(), BrigadierUtils.dynamicSuggestionProvider { getNames() }) {
+                SkyHanniMod.launchCoroutine("shnavigate command") {
+                    doCommandAsync(it.lowercase().removeColor())
+                }
+            }
+            simpleCallback {
+                doCommandAsync("")
+            }
         }
+    }
+
+    private fun getNames(): List<String> {
+        val graph = IslandGraphs.currentIslandGraph ?: return emptyList()
+        return graph.filterByActive { it.isValidAreaNode() }.mapNotNull { it.cleanName }
+    }
+
+    private fun GraphNode.isValidAreaNode(): Boolean {
+        val name = name ?: return false
+        if (name == AreaNode.NO_AREA) return false
+        if (name == SkyBlockUtils.graphArea) return false
+        return tags.any { it in allowedSingleNavigationTags }
     }
 }
